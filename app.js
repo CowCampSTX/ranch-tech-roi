@@ -11,6 +11,9 @@ const money = (x) => {
 const full = (x) => (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString();
 const num = (x) => (Math.round(x * 100) / 100).toLocaleString();
 const dollars = (x) => "$" + (Number.isInteger(Math.round(x * 100) / 100) ? num(x) : x.toFixed(2));
+// "12 months" for a one-year analysis, "5 years" otherwise; payback under a year reads in months.
+const span = (y) => (y === 1 ? "12 months" : `${y} years`);
+const pbText = (x, unit = "yrs") => (x < 1 ? `${Math.max(1, Math.round(x * 12))} months` : `${x.toFixed(1)} ${unit}`);
 const unitVal = (k, v) => {
   const u = LABEL[k].unit;
   if (u.startsWith("$")) return dollars(v) + u.slice(1);
@@ -107,7 +110,7 @@ function cumulativeChart(a) {
   if (a.payback !== null) {
     const px = m.l + (a.payback / Math.max(1, rows.length - 1)) * (W - m.l - m.r);
     svgEl("line", { x1: px, x2: px, y1: m.t, y2: H - m.b, stroke: "var(--muted)", "stroke-dasharray": "3 4" }, svg);
-    svgEl("text", { x: px + 6, y: m.t + 12, class: "lbl" }, svg).textContent = `Pays back in ${a.payback.toFixed(1)} yrs`;
+    svgEl("text", { x: px + 6, y: m.t + 12, class: "lbl" }, svg).textContent = `Pays back in ${pbText(a.payback)}`;
   }
   rows.forEach((r, i) => {
     svgEl("circle", { cx: x(i), cy: y(r.cumulative), r: 4.5, fill: "var(--s1)", stroke: "var(--surface)", "stroke-width": 2 }, svg);
@@ -179,15 +182,15 @@ function twoWay(t) {
 function tiles(a) {
   const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
   $("tiles").innerHTML =
-    tile("Net present value", `<span class="${a.npv < 0 ? "neg" : ""}">${money(a.npv)}</span>`, `at ${p.discountRate}% over ${p.years} years`) +
-    tile("Payback", a.payback === null ? "None" : a.payback.toFixed(1) + " yrs", a.payback === null ? `cash stays negative for all ${p.years} years` : "until cumulative cash turns positive") +
+    tile("Net present value", `<span class="${a.npv < 0 ? "neg" : ""}">${money(a.npv)}</span>`, `at ${p.discountRate}% over ${span(p.years)}`) +
+    tile("Payback", a.payback === null ? "None" : pbText(a.payback), a.payback === null ? `cash stays negative for all ${span(p.years)}` : "until cumulative cash turns positive") +
     tile("Internal rate of return", a.irr === null ? "n/a" : (a.irr * 100).toFixed(0) + "%", "the rate where NPV is zero") +
     tile("Return on cost", a.roi === null ? "n/a" : (a.roi * 100).toFixed(0) + "%", "(benefits − costs) ÷ costs") +
     tile("All-in cost", a.costPerHeadYear === null ? "n/a" : "$" + a.costPerHeadYear.toFixed(2), "per head per year");
   const good = a.npv >= 0;
   const top = tornado(p)[0];
   $("verdict").innerHTML = `At these numbers, ${preset.toLowerCase()} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
-    ` over ${p.years} years${good && a.payback !== null ? `, with payback in ${a.payback.toFixed(1)} years` : ""}.` +
+    ` over ${span(p.years)}${good && a.payback !== null ? `, with payback in ${pbText(a.payback, "years")}` : ""}.` +
     (top ? ` The answer depends most on <b>${LABEL[top.key].label.toLowerCase()}</b>.` : "");
 }
 
@@ -221,7 +224,7 @@ function formulas(a) {
     `<p class="formula">Net cash each year = benefit − cost (year 0: − upfront cost)</p>` +
     `<p class="formula">NPV = Σ net<sub>t</sub> ÷ (1 + ${num(p.discountRate)}%)<sup>t</sup>, t = 0…${p.years} = <b>${full(a.npv)}</b></p>` +
     `<p class="formula">IRR = the discount rate that makes NPV = 0 = <b>${a.irr === null ? "n/a" : (a.irr * 100).toFixed(1) + "%"}</b></p>` +
-    `<p class="formula">Payback = years until cumulative net cash ≥ 0, interpolated within the year = <b>${a.payback === null ? "not within " + p.years + " years" : a.payback.toFixed(2) + " years"}</b></p>` +
+    `<p class="formula">Payback = years until cumulative net cash ≥ 0, interpolated within the year = <b>${a.payback === null ? "not within " + span(p.years) : a.payback.toFixed(2) + " years"}</b></p>` +
     `<p class="formula">Return on cost = (total benefit ${full(a.totalBenefit)} − total cost ${full(a.totalCost)}) ÷ total cost = <b>${a.roi === null ? "n/a" : (a.roi * 100).toFixed(1) + "%"}</b></p>` +
     `<p class="note">Not included: taxes and depreciation, financing, resale value of the hardware at the end, and price changes over time. Add them by adjusting the inputs, for example a lower hardware cost to reflect resale.</p>`;
 }
