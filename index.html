@@ -58,6 +58,7 @@ th { color: var(--ink-2); font-weight: 600; }
 .chart { min-width: 600px; }
 th { white-space: nowrap; }
 .neg { color: var(--bad); }
+.pos { color: var(--good); }
 .formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--ink-2); }
 .formula b { color: var(--ink); font-weight: 600; }
 .grid td { text-align: center; }
@@ -95,6 +96,14 @@ th { white-space: nowrap; }
   </section>
   <section class="results">
     <div class="card"><p class="verdict" id="verdict"></p><div class="tiles" id="tiles"></div></div>
+    <div class="card">
+      <h2>5-year outlook, 12 months at a time</h2>
+      <p class="note" id="fiveNote"></p>
+      <div class="tiles" id="fiveTiles"></div>
+      <div class="legend" style="margin-top:14px"><span><span class="sw" style="background:var(--good)"></span>Gain for the 12 months</span><span><span class="sw" style="background:var(--bad)"></span>Loss for the 12 months</span></div>
+      <div class="scroll"><div id="fiveChart" class="chart"></div></div>
+      <div class="scroll"><table id="fiveTable"></table></div>
+    </div>
     <div class="card">
       <h2>Cumulative cash position</h2>
       <p class="note">Purchase in year 0, then each year's benefit minus running costs. Payback is where the line crosses zero.</p>

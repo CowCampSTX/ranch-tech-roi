@@ -201,6 +201,57 @@ function cashTable(a) {
       <td>${full(r.net / (1 + p.discountRate / 100) ** r.year)}</td></tr>`).join("");
 }
 
+// ---------------------------------------------------------------- 5-year outlook
+// Whatever "Years analyzed" says, this section runs the same inputs over 5 years and reports each 12-month period.
+// The purchase is counted in months 1-12, so each row is what that year actually did to the bank account.
+const OUTLOOK_YEARS = 5;
+function fiveYear() {
+  const a5 = analyze({ ...p, years: OUTLOOK_YEARS });
+  const [buy, ...ops] = a5.rows;
+  const periods = ops.map((r, i) => {
+    const cost = r.cost + (i === 0 ? buy.cost : 0);
+    return { year: r.year, cost, benefit: r.benefit, net: r.benefit - cost, cumulative: r.cumulative };
+  });
+  const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+  const signed = (x) => `<span class="${x < 0 ? "neg" : "pos"}">${x > 0 ? "+" : ""}${money(x)}</span>`;
+  const last = periods[periods.length - 1];
+  $("fiveNote").textContent = `The same inputs carried out to ${OUTLOOK_YEARS} years, one row per 12 months. ` +
+    `Year 1 includes the ${full(a5.upfront)} purchase and counts ${num(Math.min(100, p.year1Realized))}% of the full benefit while the crew learns the system.`;
+  $("fiveTiles").innerHTML =
+    tile("5-year return on cost", a5.roi === null ? "n/a" : `<span class="${a5.roi < 0 ? "neg" : "pos"}">${(a5.roi * 100).toFixed(0)}%</span>`, "(benefits − costs) ÷ costs over 5 years") +
+    tile("5-year gain or loss", signed(last.cumulative), "total benefit minus total cost") +
+    tile("5-year net present value", signed(a5.npv), `at ${p.discountRate}% a year`) +
+    tile("Payback", a5.payback === null ? "Not in 5 years" : pbText(a5.payback), a5.payback === null ? "cash stays negative" : "until cumulative cash turns positive");
+  fiveChart(periods);
+  $("fiveTable").innerHTML = "<tr><th>12-month period</th><th>Cost</th><th>Benefit</th><th>Gain or loss</th><th>Change from prior year</th><th>Running total</th></tr>" +
+    periods.map((r, i) => `<tr><td>Year ${r.year} <span class="note">(months ${i * 12 + 1}–${i * 12 + 12})</span></td>
+      <td>${full(r.cost)}</td><td>${full(r.benefit)}</td>
+      <td class="${r.net < 0 ? "neg" : "pos"}">${r.net > 0 ? "+" : ""}${full(r.net)}</td>
+      <td>${i ? (r.net - periods[i - 1].net > 0 ? "+" : "") + full(r.net - periods[i - 1].net) : "—"}</td>
+      <td class="${r.cumulative < 0 ? "neg" : "pos"}">${full(r.cumulative)}</td></tr>`).join("");
+}
+
+function fiveChart(periods) {
+  const W = 760, H = 220, m = { l: 64, r: 16, t: 16, b: 32 };
+  const ticks = niceTicks(Math.min(0, ...periods.map((r) => r.net)), Math.max(0, ...periods.map((r) => r.net)), 4);
+  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+  const y = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
+  const band = (W - m.l - m.r) / periods.length, bw = Math.min(64, band * 0.55);
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Gain or loss for each 12-month period over 5 years" });
+  for (const t of ticks) {
+    svgEl("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: t === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": t === 0 ? 1.5 : 1 }, svg);
+    svgEl("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, svg).textContent = money(t);
+  }
+  periods.forEach((r, i) => {
+    const cx = m.l + band * (i + 0.5), top = y(Math.max(0, r.net)), h = Math.max(1, Math.abs(y(r.net) - y(0)));
+    const bar = svgEl("rect", { x: cx - bw / 2, y: top, width: bw, height: h, rx: 3, fill: r.net < 0 ? "var(--bad)" : "var(--good)" }, svg);
+    hover(bar, `<b>Year ${r.year}</b> (months ${i * 12 + 1}–${i * 12 + 12})<br>Cost ${full(r.cost)}<br>Benefit ${full(r.benefit)}<br>Gain or loss <b>${full(r.net)}</b><br>Running total ${full(r.cumulative)}`);
+    svgEl("text", { x: cx, y: r.net < 0 ? y(r.net) + 14 : top - 5, "text-anchor": "middle", class: "lbl" }, svg).textContent = money(r.net);
+    svgEl("text", { x: cx, y: H - 10, "text-anchor": "middle" }, svg).textContent = "Year " + r.year;
+  });
+  $("fiveChart").replaceChildren(svg);
+}
+
 function formulas(a) {
   const hw = p.head * p.hardwarePerHead, b = a.fullBenefit;
   const line = (name, expr, val) => `<p class="formula">${name} = ${expr} = <b>${full(val)}</b></p>`;
@@ -231,7 +282,7 @@ function formulas(a) {
 
 function render() {
   const a = analyze(p), t = tornado(p);
-  tiles(a); cumulativeChart(a); tornadoChart(t); twoWay(t); cashTable(a); formulas(a);
+  tiles(a); fiveYear(); cumulativeChart(a); tornadoChart(t); twoWay(t); cashTable(a); formulas(a);
   writeHash();
 }
 
