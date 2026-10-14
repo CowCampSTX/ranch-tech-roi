@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ranch Tech ROI</title>
+<meta name="description" content="Will a piece of ranch technology pay for itself? Enter your numbers and see NPV, payback and which assumptions matter most.">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #6f6d68;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --s1: #2a78d6; --s2: #eb6834; --good: #006300; --bad: #b42d2d;
+  --pos-1: #cde2fb; --pos-2: #86b6ef; --neg-1: #f8d4d1; --neg-2: #eb8f8c; --mid: #f0efec;
+  --input: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a988f;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --s1: #3987e5; --s2: #d95926; --good: #0ca30c; --bad: #e66767;
+    --pos-1: #1c3a5e; --pos-2: #1c5cab; --neg-1: #4a2322; --neg-2: #8f3534; --mid: #383835;
+    --input: #232322;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a988f;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+  --s1: #3987e5; --s2: #d95926; --good: #0ca30c; --bad: #e66767;
+  --pos-1: #1c3a5e; --pos-2: #1c5cab; --neg-1: #4a2322; --neg-2: #8f3534; --mid: #383835;
+  --input: #232322;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header, main { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 28px; padding-bottom: 8px; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 17px; margin: 0 0 4px; }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); margin: 18px 0 6px; }
+p { margin: 0 0 8px; }
+.sub { color: var(--ink-2); max-width: 760px; }
+.note { color: var(--muted); font-size: 13px; }
+main { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; padding-bottom: 40px; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.inputs { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 860px) { .inputs { position: static; max-height: none; } }
+.row { display: grid; grid-template-columns: 1fr 104px; gap: 8px; align-items: center; margin: 4px 0; }
+.row label { font-size: 14px; }
+.row label small { display: block; color: var(--muted); font-size: 12px; }
+input, select, button { font: inherit; color: var(--ink); }
+input[type=number] { width: 100%; padding: 5px 7px; border: 1px solid var(--axis); border-radius: 6px; background: var(--input); text-align: right; font-variant-numeric: tabular-nums; }
+select { width: 100%; padding: 6px; border: 1px solid var(--axis); border-radius: 6px; background: var(--input); }
+button { padding: 6px 10px; border: 1px solid var(--axis); border-radius: 6px; background: var(--input); cursor: pointer; }
+.results { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .k { color: var(--ink-2); font-size: 13px; }
+.tile .v { font-size: 26px; font-weight: 600; }
+.tile .d { color: var(--muted); font-size: 12px; }
+.verdict { font-size: 16px; }
+.verdict b.good { color: var(--good); } .verdict b.bad { color: var(--bad); }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--muted); font: 12px system-ui, sans-serif; }
+svg .lbl { fill: var(--ink-2); }
+.legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin: 4px 0 8px; flex-wrap: wrap; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 14px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-2); font-weight: 600; }
+.scroll { overflow-x: auto; }
+.chart { min-width: 600px; }
+th { white-space: nowrap; }
+.neg { color: var(--bad); }
+.formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--ink-2); }
+.formula b { color: var(--ink); font-weight: 600; }
+.grid td { text-align: center; }
+.grid td.cell { color: var(--ink); }
+.tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,.15); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: none; z-index: 10; max-width: 260px; }
+.toolbar { display: flex; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ranch Tech ROI</h1>
+  <p class="sub">Will a piece of ranch technology pay for itself on your operation? Pick a starting point, replace the numbers
+    with your own quotes and records, and see the payback, the net present value and which assumptions the answer
+    really depends on. Every calculation is shown below the charts.</p>
+  <p class="note">The starting values are illustrative assumptions for a demonstration, not vendor prices or research results.</p>
+</header>
+<main>
+  <section class="card inputs" aria-label="Inputs">
+    <label for="preset"><h2>Starting point</h2></label>
+    <select id="preset"></select>
+    <div class="toolbar"><button id="reset" type="button">Reset to starting point</button><button id="copy" type="button">Copy link to this scenario</button></div>
+    <div id="fields"></div>
+  </section>
+  <section class="results">
+    <div class="card"><p class="verdict" id="verdict"></p><div class="tiles" id="tiles"></div></div>
+    <div class="card">
+      <h2>Cumulative cash position</h2>
+      <p class="note">Purchase in year 0, then each year's benefit minus running costs. Payback is where the line crosses zero.</p>
+      <div class="scroll"><div id="cumChart" class="chart"></div></div>
+    </div>
+    <div class="card">
+      <h2>What the answer depends on</h2>
+      <p class="note">Net present value with each input moved 20% down and 20% up, one at a time. The longest bars are the numbers worth checking first.</p>
+      <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Input 20% lower</span><span><span class="sw" style="background:var(--s2)"></span>Input 20% higher</span></div>
+      <div class="scroll"><div id="tornado" class="chart"></div></div>
+      <h3>Break-even values</h3>
+      <p class="note">For the biggest drivers, the value at which this investment exactly breaks even (NPV = 0), holding everything else as entered.</p>
+      <div class="scroll"><table id="breakeven"></table></div>
+    </div>
+    <div class="card">
+      <h2>Two inputs at once</h2>
+      <p class="note" id="gridNote"></p>
+      <div class="scroll"><table class="grid" id="grid"></table></div>
+    </div>
+    <div class="card">
+      <h2>Year by year</h2>
+      <div class="scroll"><table id="cashTable"></table></div>
+    </div>
+    <div class="card">
+      <h2>How every number is calculated</h2>
+      <div id="formulas"></div>
+    </div>
+  </section>
+</main>
+<div class="tip" id="tip" role="status"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
