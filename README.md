@@ -54,11 +54,12 @@ changes over time. They can be folded into the inputs (for example, a lower hard
 
 ## What the example shows
 
-With the virtual fencing starting values, a 300-head operation doesn't recover the cost in 5 years. The sensitivity
-chart shows why: hardware price per head and herd size swing the answer most. Because the per-head running cost is
-higher than the per-head benefit at these numbers, adding head makes it worse, not better. The break-even table puts a
-number on it: at about $167 per head of hardware, it pays. That is the conversation a ranch manager and a vendor would
-actually have, and the tool gets you to it in a minute.
+The starting values describe a 1,000-cow operation over a 12-month analysis. At those numbers, remote water monitoring
+pays back in about 7 months, EID tags and a scale come close to breaking even in the first year, and virtual fencing
+doesn't come close: the collars and towers cost about $290,000 up front against roughly $125,000 a year in benefit, so
+it needs a longer horizon to pay. Change **Years analyzed** to 5 and it nearly breaks even (about −$52,000). The
+sensitivity chart and break-even table show which inputs would have to change to get there. That is the conversation
+a ranch manager and a vendor would actually have, and the tool gets you to it in a minute.
 
 ## Run it locally
 

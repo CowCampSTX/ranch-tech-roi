@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ranch Tech ROI</title>
+<title>Fleming Cattle Co. ROI</title>
 <meta name="description" content="Will a piece of ranch technology pay for itself? Enter your numbers and see NPV, payback and which assumptions matter most.">
 <style>
 :root {
@@ -13,6 +13,7 @@
   --s1: #3987e5; --s2: #d95926; --good: #0ca30c; --bad: #e66767;
   --pos-1: #1c3a5e; --pos-2: #1c5cab; --neg-1: #4a2322; --neg-2: #8f3534; --mid: #383835;
   --input: #1e1e1d;
+  --brand: #b8862f; --brand-ink: #e9c98a;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -63,15 +64,27 @@ th { white-space: nowrap; }
 .grid td.cell { color: var(--ink); }
 .tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,.15); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: none; z-index: 10; max-width: 260px; }
 .toolbar { display: flex; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 14px; padding: 14px 24px; background: linear-gradient(180deg, #17120a, #000); border-bottom: 2px solid var(--brand); }
+.brand svg { width: 40px; height: 40px; flex: none; overflow: visible; }
+.brand .name { font: 700 22px/1.1 Georgia, "Times New Roman", serif; letter-spacing: .08em; text-transform: uppercase; color: var(--brand-ink); }
+.brand .tag { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
+@media (max-width: 520px) { .brand { padding: 12px 16px; } .brand .name { font-size: 18px; } }
 </style>
 </head>
 <body>
+<div class="brand" role="banner">
+  <svg viewBox="0 0 40 40" aria-hidden="true">
+    <circle cx="20" cy="20" r="18.5" fill="none" stroke="#b8862f" stroke-width="2"/>
+    <text x="20" y="26.5" text-anchor="middle" style="font: 700 17px Georgia, serif; fill: #e9c98a; letter-spacing: -1px">FC</text>
+  </svg>
+  <div><div class="name">Fleming Cattle Co. ROI</div><div class="tag">Ranch technology decisions</div></div>
+</div>
 <header>
   <h1>Ranch Tech ROI</h1>
   <p class="sub">Will a piece of ranch technology pay for itself on your operation? Pick a starting point, replace the numbers
     with your own quotes and records, and see the payback, the net present value and which assumptions the answer
     really depends on. Every calculation is shown below the charts.</p>
-  <p class="note">The starting values are illustrative assumptions for a demonstration, not vendor prices or research results.</p>
+  <p class="note">The starting values are illustrative assumptions for a 1,000-cow operation over a 12-month analysis, not vendor prices or research results.</p>
 </header>
 <main>
   <section class="card inputs" aria-label="Inputs">

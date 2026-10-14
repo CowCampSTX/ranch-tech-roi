@@ -22,28 +22,31 @@ export const FIELDS = [
   ["Yearly benefit", "year1Realized", "Benefit reached in year 1", "%", 5],
 ];
 
-/** Illustrative starting points. Not vendor quotes: replace every value with your own numbers. */
+/**
+ * Illustrative starting points for a 1,000-cow operation over a 12-month analysis. Not vendor quotes: replace every
+ * value with your own numbers.
+ */
 export const PRESETS = {
   "Virtual fencing": {
-    head: 300, years: 5, discountRate: 8,
-    hardwarePerHead: 300, fixedCost: 15000,
-    subscriptionPerHead: 30, maintenancePct: 3, replacementPct: 4,
-    laborHoursPerWeek: 10, wage: 25, deathLossPts: 0.3, valuePerHead: 2200,
-    gainLbsPerHead: 15, pricePerLb: 2.4, otherSavings: 6000, year1Realized: 60,
+    head: 1000, years: 1, discountRate: 8,
+    hardwarePerHead: 250, fixedCost: 40000,
+    subscriptionPerHead: 36, maintenancePct: 2, replacementPct: 5,
+    laborHoursPerWeek: 30, wage: 28, deathLossPts: 0.3, valuePerHead: 3000,
+    gainLbsPerHead: 12, pricePerLb: 3.5, otherSavings: 30000, year1Realized: 60,
   },
   "Remote water monitoring": {
-    head: 300, years: 5, discountRate: 8,
-    hardwarePerHead: 0, fixedCost: 9000,
-    subscriptionPerHead: 2, maintenancePct: 0, replacementPct: 0,
-    laborHoursPerWeek: 6, wage: 25, deathLossPts: 0.2, valuePerHead: 2200,
-    gainLbsPerHead: 0, pricePerLb: 2.4, otherSavings: 4500, year1Realized: 90,
+    head: 1000, years: 1, discountRate: 8,
+    hardwarePerHead: 0, fixedCost: 18000,
+    subscriptionPerHead: 3, maintenancePct: 0, replacementPct: 0,
+    laborHoursPerWeek: 12, wage: 28, deathLossPts: 0.2, valuePerHead: 3000,
+    gainLbsPerHead: 0, pricePerLb: 3.5, otherSavings: 15000, year1Realized: 90,
   },
   "EID tags and scale": {
-    head: 300, years: 5, discountRate: 8,
-    hardwarePerHead: 4, fixedCost: 7500,
+    head: 1000, years: 1, discountRate: 8,
+    hardwarePerHead: 4, fixedCost: 12000,
     subscriptionPerHead: 1, maintenancePct: 2, replacementPct: 100,
-    laborHoursPerWeek: 2, wage: 25, deathLossPts: 0, valuePerHead: 2200,
-    gainLbsPerHead: 8, pricePerLb: 2.4, otherSavings: 500, year1Realized: 50,
+    laborHoursPerWeek: 3, wage: 28, deathLossPts: 0, valuePerHead: 3000,
+    gainLbsPerHead: 10, pricePerLb: 3.5, otherSavings: 2000, year1Realized: 50,
   },
 };
 
