@@ -23,23 +23,25 @@ export const FIELDS = [
 ];
 
 /**
- * Illustrative starting points for a 1,000-cow operation over a 12-month analysis. Not vendor quotes: replace every
- * value with your own numbers.
+ * Starting points for a 1,000-cow operation. Costs come from published prices (sources on the page and in README.md);
+ * benefits are assumptions to replace with your own records. Prices change: check with the vendor before deciding.
  */
 export const PRESETS = {
-  "Virtual fencing": {
+  "Halter virtual fencing": {
+    // $4,500 infrastructure + 3 base stations at $3,000; subscription "less than $7 per head per month", collars included.
     head: 1000, years: 1, discountRate: 8,
-    hardwarePerHead: 250, fixedCost: 40000,
-    subscriptionPerHead: 36, maintenancePct: 2, replacementPct: 5,
-    laborHoursPerWeek: 30, wage: 28, deathLossPts: 0.3, valuePerHead: 3000,
-    gainLbsPerHead: 12, pricePerLb: 3.5, otherSavings: 30000, year1Realized: 60,
+    hardwarePerHead: 0, fixedCost: 13500,
+    subscriptionPerHead: 84, maintenancePct: 0, replacementPct: 0,
+    laborHoursPerWeek: 30, wage: 28, deathLossPts: 0.2, valuePerHead: 3000,
+    gainLbsPerHead: 15, pricePerLb: 3.5, otherSavings: 30000, year1Realized: 60,
   },
-  "Remote water monitoring": {
+  "Ranchbot water monitoring": {
+    // 10 satellite monitors at $1,490 each; $365 per monitor per year = $3.65 per head across 1,000 head.
     head: 1000, years: 1, discountRate: 8,
-    hardwarePerHead: 0, fixedCost: 18000,
-    subscriptionPerHead: 3, maintenancePct: 0, replacementPct: 0,
+    hardwarePerHead: 0, fixedCost: 14900,
+    subscriptionPerHead: 3.65, maintenancePct: 0, replacementPct: 0,
     laborHoursPerWeek: 12, wage: 28, deathLossPts: 0.2, valuePerHead: 3000,
-    gainLbsPerHead: 0, pricePerLb: 3.5, otherSavings: 15000, year1Realized: 90,
+    gainLbsPerHead: 0, pricePerLb: 3.5, otherSavings: 4500, year1Realized: 90,
   },
   "EID tags and scale": {
     head: 1000, years: 1, discountRate: 8,

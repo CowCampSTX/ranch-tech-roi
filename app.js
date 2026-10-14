@@ -189,7 +189,7 @@ function tiles(a) {
     tile("All-in cost", a.costPerHeadYear === null ? "n/a" : "$" + a.costPerHeadYear.toFixed(2), "per head per year");
   const good = a.npv >= 0;
   const top = tornado(p)[0];
-  $("verdict").innerHTML = `At these numbers, ${preset.toLowerCase()} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
+  $("verdict").innerHTML = `At these numbers, ${preset} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
     ` over ${span(p.years)}${good && a.payback !== null ? `, with payback in ${pbText(a.payback, "years")}` : ""}.` +
     (top ? ` The answer depends most on <b>${LABEL[top.key].label.toLowerCase()}</b>.` : "");
 }
@@ -246,7 +246,7 @@ function fiveChart(periods) {
     const cx = m.l + band * (i + 0.5), top = y(Math.max(0, r.net)), h = Math.max(1, Math.abs(y(r.net) - y(0)));
     const bar = svgEl("rect", { x: cx - bw / 2, y: top, width: bw, height: h, rx: 3, fill: r.net < 0 ? "var(--bad)" : "var(--good)" }, svg);
     hover(bar, `<b>Year ${r.year}</b> (months ${i * 12 + 1}–${i * 12 + 12})<br>Cost ${full(r.cost)}<br>Benefit ${full(r.benefit)}<br>Gain or loss <b>${full(r.net)}</b><br>Running total ${full(r.cumulative)}`);
-    svgEl("text", { x: cx, y: r.net < 0 ? y(r.net) + 14 : top - 5, "text-anchor": "middle", class: "lbl" }, svg).textContent = money(r.net);
+    svgEl("text", { x: cx, y: r.net < 0 ? y(0) - 6 : top - 5, "text-anchor": "middle", class: "lbl" }, svg).textContent = money(r.net);
     svgEl("text", { x: cx, y: H - 10, "text-anchor": "middle" }, svg).textContent = "Year " + r.year;
   });
   $("fiveChart").replaceChildren(svg);

@@ -1,7 +1,7 @@
 # Ranch Tech ROI
 
 A calculator for the question every ranch asks before buying new technology: **will it pay for itself here?**
-Pick a starting point (virtual fencing, remote water monitoring, or EID tags and a scale), replace the numbers with
+Pick a starting point (Halter virtual fencing, Ranchbot water monitoring, or EID tags and a scale), replace the numbers with
 your own quotes and records, and it shows the payback, the net present value, and which assumptions the answer really
 depends on. Every number on the page is calculated in the open, with the formula and the values that went into it.
 
@@ -9,7 +9,8 @@ depends on. Every number on the page is calculated in the open, with the formula
 
 ![Ranch Tech ROI: inputs, verdict, key numbers and the cumulative cash chart](docs/screenshot.png)
 
-> The starting values are illustrative assumptions for a demonstration, not vendor prices or research results.
+> Equipment and subscription costs in the starting values come from published prices (listed under Sources below);
+> the benefits are assumptions. Prices change, so confirm with the vendor and use your own records for a real decision.
 > Use your own quotes and records for a real decision.
 
 ## What it answers
@@ -54,12 +55,25 @@ changes over time. They can be folded into the inputs (for example, a lower hard
 
 ## What the example shows
 
-The starting values describe a 1,000-cow operation over a 12-month analysis. At those numbers, remote water monitoring
-pays back in about 7 months, EID tags and a scale come close to breaking even in the first year, and virtual fencing
-doesn't come close: the collars and towers cost about $290,000 up front against roughly $125,000 a year in benefit, so
-it needs a longer horizon to pay. Change **Years analyzed** to 5 and it nearly breaks even (about −$52,000). The
-sensitivity chart and break-even table show which inputs would have to change to get there. That is the conversation
-a ranch manager and a vendor would actually have, and the tool gets you to it in a minute.
+The starting values describe a 1,000-cow operation. In the first 12 months, Ranchbot water monitoring pays back in
+about 8 months, while Halter virtual fencing and EID tags come up just short because of first-year setup costs and the
+learning curve. The 5-year outlook shows all three paying: Halter about $175,000 ahead (a 40% return on cost, payback
+in about 17 months), EID tags about $145,000 ahead, and Ranchbot about $104,000 ahead. The sensitivity chart and
+break-even table show which assumptions those answers lean on, which is the conversation a ranch manager and a vendor
+would actually have.
+
+## Sources
+
+Published prices behind the starting values (benefit values are assumptions, not vendor claims):
+
+- Halter: $4,500 one-time infrastructure and a subscription under $7 per head per month, collars included.
+  [DTN/Progressive Farmer, April 2025](https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best)
+- Halter base stations at $3,000 each.
+  [Virtual fence manufacturer comparison, Rangelands Gateway, April 2024](https://rangelandsgateway.org/sites/default/files/users/user14/VFCompanyComparison.pdf)
+- Ranchbot: $1,490 per satellite water-level monitor and $365 per monitor per year.
+  [Ranchbot dealer flyer (All-Tex)](https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf)
+- Physical fence at about $15,000 per mile to build and 2% a year to maintain.
+  [New Mexico State University Extension, B-133](https://pubs.nmsu.edu/_b/B133/index.html)
 
 ## Run it locally
 
