@@ -27,7 +27,7 @@ export const FIELDS = [
  * benefits are assumptions to replace with your own records. Prices change: check with the vendor before deciding.
  */
 export const PRESETS = {
-  "Halter virtual fencing": {
+  "Collar-based virtual fencing": {
     // $4,500 infrastructure + 3 base stations at $3,000; subscription "less than $7 per head per month", collars included.
     head: 1000, years: 1, discountRate: 8,
     hardwarePerHead: 0, fixedCost: 13500,
@@ -35,7 +35,7 @@ export const PRESETS = {
     laborHoursPerWeek: 30, wage: 28, deathLossPts: 0.2, valuePerHead: 3000,
     gainLbsPerHead: 15, pricePerLb: 3.5, otherSavings: 30000, year1Realized: 60,
   },
-  "Ranchbot water monitoring": {
+  "Remote water monitoring": {
     // 10 satellite monitors at $1,490 each; $365 per monitor per year = $3.65 per head across 1,000 head.
     head: 1000, years: 1, discountRate: 8,
     hardwarePerHead: 0, fixedCost: 14900,

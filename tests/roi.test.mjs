@@ -61,7 +61,7 @@ test("break-even finds the value where NPV is zero", () => {
 });
 
 test("tornado is sorted by spread and skips inputs set to zero", () => {
-  const t = tornado(PRESETS["Halter virtual fencing"]);
+  const t = tornado(PRESETS["Collar-based virtual fencing"]);
   for (let i = 1; i < t.length; i++) assert.ok(t[i - 1].spread >= t[i].spread);
   assert.ok(!tornado(SIMPLE).some((r) => r.key === "wage"));
 });

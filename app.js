@@ -189,7 +189,7 @@ function tiles(a) {
     tile("All-in cost", a.costPerHeadYear === null ? "n/a" : "$" + a.costPerHeadYear.toFixed(2), "per head per year");
   const good = a.npv >= 0;
   const top = tornado(p)[0];
-  $("verdict").innerHTML = `At these numbers, ${preset} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
+  $("verdict").innerHTML = `At these numbers, ${preset.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
     ` over ${span(p.years)}${good && a.payback !== null ? `, with payback in ${pbText(a.payback, "years")}` : ""}.` +
     (top ? ` The answer depends most on <b>${LABEL[top.key].label.toLowerCase()}</b>.` : "");
 }
