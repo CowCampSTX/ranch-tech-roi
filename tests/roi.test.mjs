@@ -1,9 +1,11 @@
 // Run: node --test tests/roi.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PRESETS, FIELDS, cashFlows, npv, irr, payback, analyze, tornado, breakEven, grid } from "../roi.js";
+import { readFileSync } from "node:fs";
+import { PRESETS, FIELDS, HORIZON_NOTE, validate, cashFlows, npv, irr, payback, analyze, tornado, breakEven, grid } from "../roi.js";
 
 const close = (a, b, tol = 0.01) => assert.ok(Math.abs(a - b) <= tol, `${a} != ${b}`);
+const read = (file) => readFileSync(new URL("../" + file, import.meta.url), "utf8");
 
 // A small hand-checkable case: $1,000 upfront, $100/yr running cost, $500/yr benefit, 3 years.
 const SIMPLE = {
@@ -75,4 +77,40 @@ test("two-way grid returns the base NPV at the base point", () => {
 test("every preset fills every input", () => {
   for (const [name, p] of Object.entries(PRESETS))
     for (const [, k] of FIELDS) assert.equal(typeof p[k], "number", `${name}.${k}`);
+});
+
+test("a horizon that is not a whole number of years is rejected (10.1 row 28)", () => {
+  const error = [{ key: "years", message: "Enter a whole number of years, 1 or more." }];
+  for (const years of [2.5, 0, -1, NaN]) assert.deepEqual(validate({ ...SIMPLE, years }), error, String(years));
+  assert.deepEqual(validate(SIMPLE), []);
+  for (const [name, p] of Object.entries(PRESETS)) assert.deepEqual(validate(p), [], name);
+});
+
+test("every starting point uses the 5-year fallback horizon (F2)", () => {
+  for (const [name, p] of Object.entries(PRESETS)) assert.equal(p.years, 5, name);
+  assert.equal(HORIZON_NOTE, "5 years assumed: no contract term or asset life entered.");
+});
+
+test("the 12-month and 5-year outlook views are gone (F2)", () => {
+  const html = read("index.html");
+  for (const s of ["5-year outlook", "12 months at a time", "fiveTable"]) assert.ok(!html.includes(s), s);
+  assert.ok(!read("app.js").includes("fiveYear"));
+});
+
+test("no sentence calls every starting cost a published list price (F10 criterion 1)", () => {
+  for (const file of ["index.html", "README.md", "roi.js"]) {
+    const text = read(file).toLowerCase();
+    for (const s of ["1,000-cow operation", "come from published", "starting values are published"])
+      assert.ok(!text.includes(s), `${file} still says "${s}"`);
+  }
+});
+
+test("both sources lists date the DTN article and give the EID costs no published source (§3.4 L2)", () => {
+  for (const file of ["index.html", "README.md"]) {
+    const text = read(file);
+    assert.ok(text.includes("DTN/Progressive Farmer, 31 March 2025"), file);
+    assert.ok(!text.includes("DTN/Progressive Farmer, April 2025"), file);
+    const eid = text.lastIndexOf("EID tags and scale");
+    assert.match(text.slice(eid, eid + 300), /No published\s+source/, file);
+  }
 });

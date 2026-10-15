@@ -9,9 +9,11 @@ depends on. Every number on the page is calculated in the open, with the formula
 
 ![Ranch Tech ROI: inputs, verdict, key numbers and the cumulative cash chart](docs/screenshot.png)
 
-> Equipment and subscription costs in the starting values come from published list prices (listed under Sources below);
-> the benefits are assumptions. Prices change, so confirm with the vendor and use your own records for a real decision.
-> Use your own quotes and records for a real decision.
+> Synthetic example ranch. Made-up numbers for demonstration, not any real operation's data. Of the starting costs,
+> only the water monitor's is a published price (a dealer's undated flyer). The virtual fence costs are vendor
+> statements reported by the press and a figure from university comparison slides, not published list prices, and the
+> EID costs have no published source (see Sources below). The benefits are assumptions. Use your own quotes and
+> records for a real decision.
 
 ## What it answers
 
@@ -30,7 +32,9 @@ A scenario can be shared: **Copy link to this scenario** puts every input in the
 
 ## The model
 
-Year 0 is the purchase. Years 1 to N are operating years.
+Year 0 is the purchase. Years 1 to N are operating years. N, "Years analyzed", is a whole number of years, 1 or more;
+any other value shows an error and nothing is calculated. Each starting point uses 5 years, the fallback when no
+contract term or asset life is known, and says so beside the input.
 
 | Line | Formula |
 |---|---|
@@ -55,24 +59,28 @@ changes over time. They can be folded into the inputs (for example, a lower hard
 
 ## What the example shows
 
-The starting values describe a 1,000-cow operation. In the first 12 months, remote water monitoring pays back in about
-8 months, while collar-based virtual fencing and EID tags come up just short because of first-year setup costs and the
-learning curve. The 5-year outlook shows all three paying: virtual fencing about $175,000 ahead (a 40% return on cost,
-payback in about 17 months), EID tags about $145,000 ahead, and water monitoring about $104,000 ahead. The sensitivity
-chart and break-even table show which assumptions those answers lean on, which is the conversation a ranch manager and
-a vendor would actually have.
+Synthetic example ranch. Made-up numbers for demonstration, not any real operation's data. The example counts saved
+hours and assumed weight gain as cash, so its results are not cash results: payroll changes only if someone is paid
+less or not hired, and the weight gain is applied to the whole herd at the sale price per pound. The sensitivity chart
+and break-even table show which assumptions the answers lean on, which is the conversation a ranch manager and a
+vendor would actually have. A plan to make the results cash results is in [`docs/audit/`](docs/audit/).
 
 ## Sources
 
-Costs in the starting values are published list prices, listed for transparency. They are not endorsements of any
-product, and the benefit values are assumptions, not vendor claims.
+Each cost in the starting values is listed below as what it is: a published dealer price, a vendor statement reported
+by the press, a figure from university comparison slides, or a placeholder with no published source. They are listed
+for transparency and are not endorsements of any product, and the benefit values are assumptions, not vendor claims.
 
 - Collar-based virtual fencing: $4,500 one-time infrastructure and a subscription under $7 per head per month, collars
-  included. [DTN/Progressive Farmer, April 2025](https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best)
-- Virtual fence base stations at $3,000 each.
-  [Virtual fence manufacturer comparison, Rangelands Gateway, April 2024](https://rangelandsgateway.org/sites/default/files/users/user14/VFCompanyComparison.pdf)
-- Remote water monitoring: $1,490 per satellite water-level monitor and $365 per monitor per year.
-  [Water monitor dealer flyer (All-Tex Irrigation)](https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf)
+  included. Vendor statements reported by the press, not published list prices.
+  [DTN/Progressive Farmer, 31 March 2025](https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best)
+- Virtual fence base stations at $3,000 each. A figure from university comparison slides, given when the slides said
+  those collars were "not yet available" in the US, so not a published US price.
+  [Virtual fence manufacturer comparison, Rangelands Gateway, 16 April 2024](https://rangelandsgateway.org/sites/default/files/users/user14/VFCompanyComparison.pdf)
+- Remote water monitoring: $1,490 per satellite water-level monitor and $365 per monitor per year. A published dealer
+  price. [Water monitor dealer flyer (All-Tex Irrigation), undated; checked 15 October 2026](https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf)
+- EID tags and scale: $4 per tag, $12,000 for the reader, scale and setup, and $1 per head per year. No published
+  source: placeholders to replace with your quotes.
 - Physical fence at about $15,000 per mile to build and 2% a year to maintain.
   [New Mexico State University Extension, B-133](https://pubs.nmsu.edu/_b/B133/index.html)
 
@@ -82,7 +90,8 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/roi.test.mjs  # 9 tests: hand-checked cash flows, NPV, IRR, payback, break-even, sensitivity
+node --test tests/roi.test.mjs  # 14 tests: hand-checked cash flows, NPV, IRR, payback, break-even, sensitivity,
+                                # the horizon rule and the wording of the sources
 ```
 
 ## Files
@@ -93,6 +102,7 @@ app.js            page wiring: inputs, charts, tables, written-out formulas
 roi.js            the model: pure functions, no dependencies, shared by the page and the tests
 tests/            node:test unit tests, including a small case checked by hand
 docs/             screenshots
+docs/audit/       the audit and improvement plan, and the phase-1 specification
 ```
 
 ## License

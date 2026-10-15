@@ -1,5 +1,5 @@
 // Page wiring for Ranch Tech ROI: inputs -> roi.js -> tiles, charts, tables and the written-out formulas.
-import { FIELDS, PRESETS, analyze, tornado, breakEven, grid } from "./roi.js";
+import { FIELDS, PRESETS, HORIZON_NOTE, validate, analyze, tornado, breakEven, grid } from "./roi.js";
 
 const $ = (id) => document.getElementById(id);
 const LABEL = Object.fromEntries(FIELDS.map(([, k, label, unit]) => [k, { label, unit }]));
@@ -11,8 +11,8 @@ const money = (x) => {
 const full = (x) => (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString();
 const num = (x) => (Math.round(x * 100) / 100).toLocaleString();
 const dollars = (x) => "$" + (Number.isInteger(Math.round(x * 100) / 100) ? num(x) : x.toFixed(2));
-// "12 months" for a one-year analysis, "5 years" otherwise; payback under a year reads in months.
-const span = (y) => (y === 1 ? "12 months" : `${y} years`);
+// "1 year" or "5 years"; payback under a year reads in months.
+const span = (y) => (y === 1 ? "1 year" : `${y} years`);
 const pbText = (x, unit = "yrs") => (x < 1 ? `${Math.max(1, Math.round(x * 12))} months` : `${x.toFixed(1)} ${unit}`);
 const unitVal = (k, v) => {
   const u = LABEL[k].unit;
@@ -23,16 +23,25 @@ const unitVal = (k, v) => {
 
 let preset = Object.keys(PRESETS)[0];
 let p = { ...PRESETS[preset] };
+// True while "Years analyzed" is the starting point's fallback horizon rather than a value the user or a link set.
+let yearsAssumed = true;
 
 // ---------------------------------------------------------------- state in the link
 function readHash() {
   const q = new URLSearchParams(location.hash.slice(1));
-  if (q.has("preset") && PRESETS[q.get("preset")]) { preset = q.get("preset"); p = { ...PRESETS[preset] }; }
+  if (![...q.keys()].length) return;
+  if (q.has("preset") && PRESETS[q.get("preset")]) preset = q.get("preset");
+  p = { ...PRESETS[preset] };
+  // Every link written by this version carries its horizon. A link without one was made when the starting points
+  // analyzed 1 year, so it keeps that horizon and its verdict.
+  p.years = 1;
   for (const [, k] of FIELDS) if (q.has(k) && !isNaN(+q.get(k))) p[k] = +q.get(k);
+  // A horizon read from a link was set by the link, not assumed, whatever its value.
+  yearsAssumed = false;
 }
 function writeHash() {
   const q = new URLSearchParams({ preset });
-  for (const [, k] of FIELDS) if (p[k] !== PRESETS[preset][k]) q.set(k, p[k]);
+  for (const [, k] of FIELDS) if (k === "years" || p[k] !== PRESETS[preset][k]) q.set(k, p[k]);
   history.replaceState(null, "", "#" + q.toString());
 }
 
@@ -41,9 +50,14 @@ function buildInputs() {
   $("preset").innerHTML = Object.keys(PRESETS).map((n) => `<option${n === preset ? " selected" : ""}>${n}</option>`).join("");
   let html = "", group = "";
   for (const [g, k, label, unit, step] of FIELDS) {
-    if (g !== group) { html += `<h3>${g}</h3>`; group = g; }
+    if (g !== group) {
+      html += `<h3>${g}</h3>`; group = g;
+      if (g === "Yearly benefit") html += `<p class="note">Assumptions to replace with your own records, not vendor claims or measured results.</p>`;
+    }
     html += `<div class="row"><label for="f-${k}">${label}<small>${unit}</small></label>
       <input type="number" id="f-${k}" data-k="${k}" step="${step}" min="0" value="${p[k]}"></div>`;
+    if (k === "years") html += `<p class="note" id="yearsNote"></p>`;
+    html += `<p class="note error" id="err-${k}" role="alert"></p>`;
   }
   $("fields").innerHTML = html;
 }
@@ -51,10 +65,11 @@ $("fields").addEventListener("input", (e) => {
   const k = e.target.dataset.k;
   if (!k || e.target.value === "" || isNaN(+e.target.value)) return;
   p[k] = Math.max(0, +e.target.value);
+  if (k === "years") yearsAssumed = false;
   render();
 });
-$("preset").addEventListener("change", (e) => { preset = e.target.value; p = { ...PRESETS[preset] }; buildInputs(); render(); });
-$("reset").addEventListener("click", () => { p = { ...PRESETS[preset] }; buildInputs(); render(); });
+$("preset").addEventListener("change", (e) => { preset = e.target.value; p = { ...PRESETS[preset] }; yearsAssumed = true; buildInputs(); render(); });
+$("reset").addEventListener("click", () => { p = { ...PRESETS[preset] }; yearsAssumed = true; buildInputs(); render(); });
 $("copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(location.href); $("copy").textContent = "Link copied"; }
   catch { $("copy").textContent = "Copy the address bar"; }
@@ -183,7 +198,7 @@ function tiles(a) {
   const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
   $("tiles").innerHTML =
     tile("Net present value", `<span class="${a.npv < 0 ? "neg" : ""}">${money(a.npv)}</span>`, `at ${p.discountRate}% over ${span(p.years)}`) +
-    tile("Payback", a.payback === null ? "None" : pbText(a.payback), a.payback === null ? `cash stays negative for all ${span(p.years)}` : "until cumulative cash turns positive") +
+    tile("Payback", a.payback === null ? "None" : pbText(a.payback), a.payback === null ? (p.years === 1 ? "cash stays negative for the whole year" : `cash stays negative for all ${span(p.years)}`) : "until cumulative cash turns positive") +
     tile("Internal rate of return", a.irr === null ? "n/a" : (a.irr * 100).toFixed(0) + "%", "the rate where NPV is zero") +
     tile("Return on cost", a.roi === null ? "n/a" : (a.roi * 100).toFixed(0) + "%", "(benefits − costs) ÷ costs") +
     tile("All-in cost", a.costPerHeadYear === null ? "n/a" : "$" + a.costPerHeadYear.toFixed(2), "per head per year");
@@ -199,57 +214,6 @@ function cashTable(a) {
     a.rows.map((r) => `<tr><td>${r.year}</td><td>${full(r.cost)}</td><td>${full(r.benefit)}</td>
       <td class="${r.net < 0 ? "neg" : ""}">${full(r.net)}</td><td class="${r.cumulative < 0 ? "neg" : ""}">${full(r.cumulative)}</td>
       <td>${full(r.net / (1 + p.discountRate / 100) ** r.year)}</td></tr>`).join("");
-}
-
-// ---------------------------------------------------------------- 5-year outlook
-// Whatever "Years analyzed" says, this section runs the same inputs over 5 years and reports each 12-month period.
-// The purchase is counted in months 1-12, so each row is what that year actually did to the bank account.
-const OUTLOOK_YEARS = 5;
-function fiveYear() {
-  const a5 = analyze({ ...p, years: OUTLOOK_YEARS });
-  const [buy, ...ops] = a5.rows;
-  const periods = ops.map((r, i) => {
-    const cost = r.cost + (i === 0 ? buy.cost : 0);
-    return { year: r.year, cost, benefit: r.benefit, net: r.benefit - cost, cumulative: r.cumulative };
-  });
-  const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
-  const signed = (x) => `<span class="${x < 0 ? "neg" : "pos"}">${x > 0 ? "+" : ""}${money(x)}</span>`;
-  const last = periods[periods.length - 1];
-  $("fiveNote").textContent = `The same inputs carried out to ${OUTLOOK_YEARS} years, one row per 12 months. ` +
-    `Year 1 includes the ${full(a5.upfront)} purchase and counts ${num(Math.min(100, p.year1Realized))}% of the full benefit while the crew learns the system.`;
-  $("fiveTiles").innerHTML =
-    tile("5-year return on cost", a5.roi === null ? "n/a" : `<span class="${a5.roi < 0 ? "neg" : "pos"}">${(a5.roi * 100).toFixed(0)}%</span>`, "(benefits − costs) ÷ costs over 5 years") +
-    tile("5-year gain or loss", signed(last.cumulative), "total benefit minus total cost") +
-    tile("5-year net present value", signed(a5.npv), `at ${p.discountRate}% a year`) +
-    tile("Payback", a5.payback === null ? "Not in 5 years" : pbText(a5.payback), a5.payback === null ? "cash stays negative" : "until cumulative cash turns positive");
-  fiveChart(periods);
-  $("fiveTable").innerHTML = "<tr><th>12-month period</th><th>Cost</th><th>Benefit</th><th>Gain or loss</th><th>Change from prior year</th><th>Running total</th></tr>" +
-    periods.map((r, i) => `<tr><td>Year ${r.year} <span class="note">(months ${i * 12 + 1}–${i * 12 + 12})</span></td>
-      <td>${full(r.cost)}</td><td>${full(r.benefit)}</td>
-      <td class="${r.net < 0 ? "neg" : "pos"}">${r.net > 0 ? "+" : ""}${full(r.net)}</td>
-      <td>${i ? (r.net - periods[i - 1].net > 0 ? "+" : "") + full(r.net - periods[i - 1].net) : "—"}</td>
-      <td class="${r.cumulative < 0 ? "neg" : "pos"}">${full(r.cumulative)}</td></tr>`).join("");
-}
-
-function fiveChart(periods) {
-  const W = 760, H = 220, m = { l: 64, r: 16, t: 16, b: 32 };
-  const ticks = niceTicks(Math.min(0, ...periods.map((r) => r.net)), Math.max(0, ...periods.map((r) => r.net)), 4);
-  const y0 = ticks[0], y1 = ticks[ticks.length - 1];
-  const y = (v) => m.t + (1 - (v - y0) / (y1 - y0)) * (H - m.t - m.b);
-  const band = (W - m.l - m.r) / periods.length, bw = Math.min(64, band * 0.55);
-  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Gain or loss for each 12-month period over 5 years" });
-  for (const t of ticks) {
-    svgEl("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: t === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": t === 0 ? 1.5 : 1 }, svg);
-    svgEl("text", { x: m.l - 8, y: y(t) + 4, "text-anchor": "end" }, svg).textContent = money(t);
-  }
-  periods.forEach((r, i) => {
-    const cx = m.l + band * (i + 0.5), top = y(Math.max(0, r.net)), h = Math.max(1, Math.abs(y(r.net) - y(0)));
-    const bar = svgEl("rect", { x: cx - bw / 2, y: top, width: bw, height: h, rx: 3, fill: r.net < 0 ? "var(--bad)" : "var(--good)" }, svg);
-    hover(bar, `<b>Year ${r.year}</b> (months ${i * 12 + 1}–${i * 12 + 12})<br>Cost ${full(r.cost)}<br>Benefit ${full(r.benefit)}<br>Gain or loss <b>${full(r.net)}</b><br>Running total ${full(r.cumulative)}`);
-    svgEl("text", { x: cx, y: r.net < 0 ? y(0) - 6 : top - 5, "text-anchor": "middle", class: "lbl" }, svg).textContent = money(r.net);
-    svgEl("text", { x: cx, y: H - 10, "text-anchor": "middle" }, svg).textContent = "Year " + r.year;
-  });
-  $("fiveChart").replaceChildren(svg);
 }
 
 function formulas(a) {
@@ -281,9 +245,19 @@ function formulas(a) {
 }
 
 function render() {
-  const a = analyze(p), t = tornado(p);
-  tiles(a); fiveYear(); cumulativeChart(a); tornadoChart(t); twoWay(t); cashTable(a); formulas(a);
+  const errors = validate(p);
+  for (const [, k] of FIELDS) $("err-" + k).textContent = errors.filter((e) => e.key === k).map((e) => e.message).join(" ");
+  $("yearsNote").textContent = yearsAssumed && !errors.some((e) => e.key === "years") ? HORIZON_NOTE : "";
+  $("results").classList.toggle("invalid", errors.length > 0);
   writeHash();
+  if (errors.length) {
+    // Nothing is computed until every input is valid.
+    $("verdict").textContent = "Fix the inputs marked in red to see results. " + errors.map((e) => e.message).join(" ");
+    $("tiles").innerHTML = "";
+    return;
+  }
+  const a = analyze(p), t = tornado(p);
+  tiles(a); cumulativeChart(a); tornadoChart(t); twoWay(t); cashTable(a); formulas(a);
 }
 
 readHash();
