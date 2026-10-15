@@ -1,5 +1,5 @@
-// Page wiring for Ranch Tech ROI: inputs -> roi.js -> tiles, charts, tables and the written-out formulas.
-import { FIELDS, PRESETS, HORIZON_NOTE, validate, analyze, tornado, breakEven, grid } from "./roi.js";
+// Page wiring for Ranch Tech ROI: inputs -> v1.js (today's model) -> tiles, charts, tables and the written-out formulas.
+import { FIELDS, PRESETS, HORIZON_NOTE, validate, analyze, tornado, breakEven, grid } from "./v1.js";
 
 const $ = (id) => document.getElementById(id);
 const LABEL = Object.fromEntries(FIELDS.map(([, k, label, unit]) => [k, { label, unit }]));

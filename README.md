@@ -57,6 +57,26 @@ contract term or asset life is known, and says so beside the input.
 Not included, on purpose, to keep it readable: taxes and depreciation, financing, resale value at the end, and price
 changes over time. They can be folded into the inputs (for example, a lower hardware cost to reflect resale).
 
+## The new engine (being built)
+
+`roi.js` holds the engine that phase 1 builds one step at a time from the specification in
+[`docs/audit/phase1-spec.md`](docs/audit/phase1-spec.md) (sections 9.2 and 9.3). The page moves to it in the last
+step and runs on today's model, `v1.js`, until then. Money is in today's dollars, before tax, at a real discount rate,
+over years 0 to T. Built so far:
+
+| Part | Rule |
+|---|---|
+| Cost lines | Each cost is its own line: capital (bought) or annual (billed each season), with a quantity that is fixed (1) or per device. A blank price is not counted and is listed as "Quote required", unless the line has no quantity in any year. A blank start year or billing takes the default. |
+| Capital purchases | Bought in the line's start year s. Each later rise in quantity is a new group of devices, counted against the largest quantity so far (for items that leave with the animal, against the year before). Each group is bought again every L years, its life, while that year is before T; with no life entered, it is bought once. |
+| Repairs | repair % × the purchase's cost, in each year the purchase is in service |
+| Residual at T | from each group's last purchase: straight line, cost × (life left at T ÷ L), between 0 and 100%; none; a % of cost; or a dollar amount for the whole line. It is its own series, R. |
+| Annual lines | Season t (t = s + 1 … T) costs that season's price × quantity, billed in year t − 1 in advance (the default for subscriptions and service fees) or in year t in arrears. Inside a commitment the billed quantity is at least the minimum; a commitment that runs past T charges its early-termination fee in year T. |
+| Labor cut (cash) | Only when the freed time replaces paid work: units cut × hours per unit × pay rate × (1 + payroll load), or units cut × salary × (1 + load) for a position. Until that question is answered the time is "absorbed" and counts as no cash. The paid hours cut cannot be more than the hours saved. |
+| Avoided hire (cash) | salary × (1 + load) in each year of a planned hire that is not made |
+| Added hours | Paid: hours × pay rate × (1 + load), a cost in the year they are worked. Unpaid: they lower the hours freed. A single number recurs in each operating year; hours given by year put setup time, such as install, in the start year. |
+| Hours freed (capacity) | hours saved − paid hours cut − unpaid hours added, in hours, valued at the owner's time rate in the economic view only, never as cash |
+| Results | net cash N = cash benefits + residual − costs; cash NPV = Σ N<sub>t</sub> ÷ (1 + r)<sup>t</sup>; benefit-cost ratio = (PV of cash benefits + PV of residual) ÷ PV of costs; IRR and payback on N, as today |
+
 ## What the example shows
 
 Synthetic example ranch. Made-up numbers for demonstration, not any real operation's data. The example counts saved
@@ -90,8 +110,10 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/roi.test.mjs  # 14 tests: hand-checked cash flows, NPV, IRR, payback, break-even, sensitivity,
-                                # the horizon rule and the wording of the sources
+node --test tests/*.test.mjs    # 50 tests. v1.test.mjs (15): today's model, its hand-checked case, the horizon
+                                # rule and the wording of the sources. roi.test.mjs (35): the phase-1 engine's
+                                # cost lines, billing, labor and validation, the same hand-checked
+                                # case, and Synthetic Ranch A's pinned cash NPV
 ```
 
 ## Files
@@ -99,7 +121,8 @@ node --test tests/roi.test.mjs  # 14 tests: hand-checked cash flows, NPV, IRR, p
 ```
 index.html        the page and its styles (light and dark mode, works on a phone)
 app.js            page wiring: inputs, charts, tables, written-out formulas
-roi.js            the model: pure functions, no dependencies, shared by the page and the tests
+v1.js             today's model, which the page runs on: pure functions, no dependencies, shared with the tests
+roi.js            the phase-1 engine, being built step by step (see "The new engine" above); the page does not use it yet
 tests/            node:test unit tests, including a small case checked by hand
 docs/             screenshots
 docs/audit/       the audit and improvement plan, and the phase-1 specification
