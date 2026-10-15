@@ -117,6 +117,16 @@ test("both sources lists date the DTN article and give the EID costs no publishe
   }
 });
 
+test("today's page says its results are before tax and labels the rate as an example (owner rules, until step 6)", () => {
+  const app = read("app.js");
+  for (const k of ["Net present value", "Payback", "Internal rate of return", "Return on cost", "All-in cost"]) {
+    assert.ok(app.includes(`tile("${k} (before tax)"`), k);
+  }
+  assert.ok(app.includes("At these numbers, before tax, "));
+  assert.ok(app.includes("Example assumption, not a recommendation. Review it for your operation."));
+  assert.ok(read("index.html").includes("Cash flows before income tax."));
+});
+
 test("V1_FIELDS and V1_PRESETS keep the inputs and starting points of commit d0fd9b8 (B8)", () => {
   assert.deepEqual(V1_FIELDS, FIELDS);
   // Step 1 changed only the starting points' horizon, from 1 year to the 5-year fallback.
