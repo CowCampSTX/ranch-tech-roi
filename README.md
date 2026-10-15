@@ -79,8 +79,14 @@ over years 0 to T. Built so far:
 | Head-months | Virtual fence: enrolled head × months enrolled, by class. Water and EID: head × months on the served pastures (12 by default), over the served classes. Calves sold and cull cows sold are sale flows drawn from other classes and never count. |
 | Head-based quantities | Per head-month: the head-months of the line's classes. Per head-year: their head × 12, with a warning when they are enrolled or served for fewer months; a committed minimum is then 12 × the minimum head. Per device from a class (such as calf tags): that class's head, and a purchase in year t buys for the season that ends at t + 1. |
 | No cattle | In any year after year 0 with no head-months, every benefit that needs cattle and the hours freed are 0, and the page says "No cattle in year t: benefits not counted." Costs are not zeroed: head-based ones fall to 0 on their own, and committed minimums are still billed. |
-| Shared savings | Each saving claims a physical quantity: water runs, moving and gathering hours, death loss by cause, or interior fence miles. A claim above the ranch's own baseline (runs today, hours today, losses on record, fence in the plan) is counted only up to it, with a warning; when the baseline is blank, the page asks for it. When two technologies claim the same quantity, each claim is scaled by baseline ÷ total claimed (at most 1), with a warning naming both, and the hours those claims save, with the paid hours cut they support, scale with them. |
-| Results | net cash N = cash benefits + residual − costs; cash NPV = Σ N<sub>t</sub> ÷ (1 + r)<sup>t</sup>; benefit-cost ratio = (PV of cash benefits + PV of residual) ÷ PV of costs; IRR and payback on N, as today |
+| Shared savings | Each saving claims a physical quantity: water runs, moving and gathering hours, death loss by cause, or interior fence miles. A claim above the ranch's own baseline (runs today, hours today, losses on record, fence in the plan) is counted only up to it, with a warning; when the baseline is blank, the page asks for it. The baseline is split by land unit like the claims: in each year it counts only the units whose part still counts (owned units, leases not yet ended and leases expected to renew), and the fence's baseline follows the fence's own land unit. When two technologies claim the same quantity, each claim is scaled by baseline ÷ total claimed (at most 1), with a warning naming both, and the hours those claims save, with the paid hours cut they support, scale with them. |
+| Weight gain | lb a day × days × head sold × value of gain, over the sold classes (calves sold, cull cows sold, and yearlings × the share sold). Value of gain is dollars per pound added, not the sale price per pound; from two weight-class quotes it is (W<sub>heavy</sub> × P<sub>heavy</sub> − W<sub>base</sub> × P<sub>base</sub>) ÷ (W<sub>heavy</sub> − W<sub>base</sub>), with the heavier weight above the base weight. It counts in the economic view only, unless it comes from the ranch's own records, when it is cash. |
+| Losses avoided | events a year × head per event × share caught × value per head, claimed against that cause's death loss (the lines of one cause share one baseline). An expected loss, never cash: it enters "cash NPV including expected losses avoided" and economic NPV, never cash NPV, BCR, IRR or payback. Water's optional losses from fewer physical checks subtract the same way. |
+| Land units and who pays | Each water and virtual fence line is split across the land units by their share of head-months or water points (EID lines are not split). For each unit's part, the operator's flow is the operator share (1 unless changed) × the flow; the rest is listed as paid or received by others and never enters a result. On a lease that ends within the horizon with no renewal expected, that unit's part of each benefit stops at the lease end; an improvement that stays with the land stops there too, with its share of the lease reimbursement as its residual. Where the landlord provides and checks the water, or water care is in the lease rate, the vehicle, labor and hours-freed savings there go to the landowner by default. |
+| Interior fence | Avoided: the cost of the fence the ranch would build, F × miles in build year k, rebuilt every Lf years, with upkeep m × cost a year, less its straight-line residual at T. Deferred by d: that stream less the same stream starting in year k + d. It lies whole on its own land unit: a landlord-built fence is the landlord's saving, a lease ending at T' stops the stream at T' with the lease's fence reimbursement as its residual, and a landlord who maintains it makes the upkeep 0. Its purchases count if the module has cattle in some year; its upkeep only in years with cattle. |
+| Results | The operator's share only. Net cash N = cash benefits + residual − costs; cash NPV = Σ N<sub>t</sub> ÷ (1 + r)<sup>t</sup>; cash NPV including expected losses avoided adds their PV; economic NPV adds the PV of losses avoided, capacity value and production. Benefit-cost ratio = (PV of cash benefits + PV of residual) ÷ PV of costs (n/a with no costs); cost per head-month = PV of costs ÷ PV of head-months in years 1 to T. Amounts under half a cent count as 0. |
+| IRR | The rate at which the NPV of N is 0, found by bisection from the first year with cash flows. It is n/a with no cash flows, with no outlay in that first year, or with more than one sign change; "below 0%" when the nets sum to less than 0; and stated as above the search range past 10,000%. |
+| Payback | Counted from year 0: k − 1 + (−cumulative N<sub>k−1</sub> ÷ N<sub>k</sub>), where k is the first year from which cumulative N stays ≥ 0 through T. When the first cash flow comes after year 0, the text says so ("counted from year 0; the first cash flow is in year s₀"); when cumulative cash was positive and then negative again before k, a note says so. "None within T years" when cumulative cash is still negative at T; "no net outlay" when it is never negative. Discounted payback is the same on discounted N. |
 
 ## What the example shows
 
@@ -115,12 +121,13 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 78 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
+node --test tests/*.test.mjs    # 127 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
                                 # rule, the wording of the sources, and the before-tax and example-rate labels.
-                                # roi.test.mjs (53): the phase-1 engine's cost lines, billing, labor, head
-                                # counts, shared savings and validation, the same hand-checked case, and
-                                # Synthetic Ranch A's pinned cash NPV. text.test.mjs (9): the notices and
-                                # warnings the page will show
+                                # roi.test.mjs (88): the phase-1 engine's cost lines, billing, labor, head
+                                # counts, shared savings, metrics, weight gain, losses avoided, land units,
+                                # operator shares, the fence and validation, the same hand-checked case, and
+                                # Synthetic Ranch A's pinned results. text.test.mjs (23): the notices,
+                                # warnings, result texts, tiles and verdict the page will show
 ```
 
 ## Files
@@ -130,7 +137,8 @@ index.html        the page and its styles (light and dark mode, works on a phone
 app.js            page wiring: inputs, charts, tables, written-out formulas
 v1.js             today's model, which the page runs on: pure functions, no dependencies, shared with the tests
 roi.js            the phase-1 engine, being built step by step (see "The new engine" above); the page does not use it yet
-text.js           the page text the new engine's results will show: formats, names, notices and warnings
+text.js           the page text the new engine's results will show: formats, names, notices, warnings,
+                  result texts, tiles and the verdict
 tests/            node:test unit tests, including a small case checked by hand
 docs/             screenshots
 docs/audit/       the audit and improvement plan, and the phase-1 specification
