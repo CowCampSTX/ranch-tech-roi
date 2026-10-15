@@ -4,8 +4,9 @@
 // Money is in today's US dollars, before tax; the discount rate is real. Years run t = 0..T.
 // Built so far: cost lines with the capital scheduler, billing and commitments (F5), labor (F1), pools with the
 // single-module clamp and combine() (F9), head-months, head-based quantities and the cattle-presence rule (F3), and the
-// metrics with the IRR and payback states (F8), production and risk lines (F4, F7), and land units, operator shares and
-// the fence (F6). Still to come: ramp (B3) and the modules.
+// metrics with the IRR and payback states (F8), production and risk lines (F4, F7), land units, operator shares and
+// the fence (F6), the ramp (B3), and the three modules: water monitoring (B7), virtual fencing, and EID tags and scale
+// (B4a). Still to come: the N-year test and "What would make it pay" (B9).
 
 const blank = (v) => v === null || v === undefined || v === "";
 const num = (v) => (blank(v) ? 0 : v);
@@ -132,7 +133,8 @@ export function payback(nets, s0 = 0) {
 // ---------------------------------------------------------------- cost lines (F5)
 
 /**
- * A cost line's quantity in year t (9.3): fixed 1; perDevice its qty, or the head of its classes when it lists any;
+ * A cost line's quantity in year t (9.3): fixed 1; perDevice its qty, or the head of its classes when it lists any
+ * (times qtyPerHead, which a module sets for items per head, such as batteries per collar or the retag rate);
  * perHeadMonth the head-months of its classes; perHeadYear their head × 12. A capital line's head-based quantity in
  * year t is the head of season t + 1, which the devices bought in year t serve, and in year T that of year T (9.2
  * field notes).
@@ -148,7 +150,8 @@ function quantity(line, t, herd, capital = false) {
   const u = capital ? Math.min(t + 1, herd.T) : t;
   if (line.basis === "perHeadMonth") return sum(classes.map((c) => herd.hm(c, u)));
   const head = sum(classes.map((c) => herd.head(c, u)));
-  return line.basis === "perHeadYear" ? 12 * head : head;
+  if (line.basis === "perDevice") return head * (line.qtyPerHead ?? 1); // a module's items per head (9.3)
+  return 12 * head;
 }
 
 /** The billing of an annual line: as entered, else (blank) in advance for subscriptions and service fees (9.2). */
@@ -210,8 +213,9 @@ export function scheduleCapital(line, T, s, herd) {
  * year t in arrears, at the price and quantity of season t. Inside the commitment (seasons s+1..s+commitYears) the
  * billed quantity is at least minQty (for perHeadYear, 12 × minQty head, 9.2 field notes). A commitment that runs past
  * T charges its early-termination fee in year T. herd (herdOf) is needed for a quantity taken from head counts.
- * Returns { cost, residual, commitPastHorizon, blankPrice } with cost by year (an annual line has no residual);
- * blankPrice is true when a season with a quantity billed is priced blank ("Quote required", counted as 0).
+ * Returns { cost, residual, bills: [{year, qty, unitCost}], commitPastHorizon, blankPrice } with cost by year (an
+ * annual line has no residual) and each season's bill by the year it is paid; blankPrice is true when a season with a
+ * quantity billed is priced blank ("Quote required", counted as 0).
  */
 export function billAnnual(line, T, s, herd) {
   const cost = zeros(T);
@@ -219,15 +223,18 @@ export function billAnnual(line, T, s, herd) {
   const commitYears = num(line.commitYears);
   const minQty = (line.basis === "perHeadYear" ? 12 : 1) * num(line.minQty);
   let blankPrice = false;
+  const bills = [];
   for (let t = s + 1; t <= T; t++) {
     const qty = quantity(line, t, herd);
     const billedQty = t <= s + commitYears ? Math.max(qty, minQty) : qty;
     if (billedQty > 0 && blank(at(line.unitCost, t))) blankPrice = true;
-    cost[advance ? t - 1 : t] += num(at(line.unitCost, t)) * billedQty;
+    const unitCost = num(at(line.unitCost, t)), year = advance ? t - 1 : t;
+    cost[year] += unitCost * billedQty;
+    bills.push({ year, qty: billedQty, unitCost });
   }
   const commitPastHorizon = commitYears > 0 && s + commitYears > T;
   if (commitPastHorizon) cost[T] += num(line.earlyTerminationFee);
-  return { cost, residual: zeros(T), commitPastHorizon, blankPrice };
+  return { cost, residual: zeros(T), bills, commitPastHorizon, blankPrice };
 }
 
 // ---------------------------------------------------------------- labor (F1)
@@ -291,12 +298,236 @@ export function poolBaseline(pool, a, T) {
   return series.some((b) => b === null) ? null : series;
 }
 
+// ---------------------------------------------------------------- modules (B7, virtual fence, B4a)
+
+/** The module lines' labels on the page (9.4), by module and line id. */
+export const LINE_LABELS = {
+  water: { monitors: "Monitors", mounting: "Mounting", subscription: "Subscription", batteries: "Batteries and repairs",
+    vehicle: "Vehicle" },
+  vf: { subscription: "Subscription", collars: "Purchased collars", serviceFee: "Service fee", collarBatteries: "Collar batteries",
+    baseStations: "Base stations", infrastructure: "Infrastructure", collarLoss: "Collar loss" },
+  eid: { cowTags: "Cow tags", calfTags: "Calf tags", retags: "Retags", reader: "Reader", indicatorBars: "Indicator and load bars",
+    platform: "Platform", software: "Software", premium: "Net program premium", dosing: "Dosing savings" },
+};
+
+/**
+ * The module lines whose timing, basis and billing 9.3 and the 9.2 field notes fix (Virtual fence lines; EID lines and
+ * premium: cow tags are bought per animal and leave with it, calf tags and retags are used up each season and billed
+ * in arrears). They take the place of whatever the stored line holds.
+ */
+const FIXED_TIMING = {
+  vf: { collars: { timing: "capital", basis: "perDevice" }, serviceFee: { timing: "annual", basis: "perDevice", billing: "advance" },
+    collarBatteries: { timing: "annual", billing: "arrears" }, collarLoss: { timing: "annual", billing: "arrears" } },
+  eid: { cowTags: { timing: "capital", basis: "perDevice" }, calfTags: { timing: "annual", billing: "arrears" },
+    retags: { timing: "annual", billing: "arrears" } },
+};
+
+/** The classes a virtual fence analysis enrolls (never a sale flow, 9.2). */
+const enrolledClasses = (a) => Object.keys(a.enrolled ?? {}).filter((c) => !SALE_FLOWS.includes(c));
+const headPaths = (a, classes) => classes.map((c) => (a.module === "vf" ? `enrolled.${c}.head` : `classes.${c}.head`));
+
+/**
+ * The analysis's cost lines (9.2, 9.4): each line stored in a.costs, with its label and what its module derives.
+ * Water: the monitors, subscription and batteries lines count water.monitors. Virtual fence: the subscription, or the
+ * purchased collars and the service fee (by vf.pricing), and the collar batteries count the enrolled classes, the
+ * batteries at vf.batteriesPerCollar per collar; the collarLoss line, built from vf.collarLoss, counts
+ * pctPerYear × enrolled head at chargePerCollar (9.3 Virtual fence lines). EID: the cow tags (from the classes on the
+ * cowTags line, cows by default; they leave with the animal), the calf tags (from calvesBorn) and the retags
+ * (retagPct × the cow-tag classes' head) are priced at eid.tagPrice, and marked as tag lines for the free tags (9.3).
+ */
+function moduleCostLines(a) {
+  const m = a.module, costs = { ...(a.costs ?? {}) };
+  if (m === "vf" && a.vf?.collarLoss && !costs.collarLoss) costs.collarLoss = {};
+  const pricing = a.vf?.pricing;
+  const skip = (id) => m === "vf" && ((pricing === "leased" && (id === "collars" || id === "serviceFee"))
+    || (pricing === "purchased" && id === "subscription"));
+  const cowClasses = costs.cowTags?.classes?.length ? costs.cowTags.classes : ["cows"];
+  return Object.entries(costs).filter(([id]) => !skip(id)).map(([id, c]) => {
+    const line = { ...c, id, kind: "cost", label: LINE_LABELS[m]?.[id] ?? c.label ?? id, ...FIXED_TIMING[m]?.[id] };
+    let paths = null;
+    if (m === "water" && ["monitors", "subscription", "batteries"].includes(id) && !blank(a.water?.monitors)) {
+      Object.assign(line, { basis: "perDevice", qty: a.water.monitors });
+      paths = [`costs.${id}.unitCost`, "water.monitors"];
+    } else if (m === "vf" && ["subscription", "collars", "serviceFee", "collarBatteries", "collarLoss"].includes(id)) {
+      if (!c.classes?.length) line.classes = enrolledClasses(a);
+      if (id === "collarBatteries") Object.assign(line, { basis: "perDevice", qtyPerHead: num(a.vf?.batteriesPerCollar) });
+      if (id === "collarLoss") {
+        const loss = a.vf?.collarLoss ?? {};
+        Object.assign(line, { basis: "perDevice", qtyPerHead: num(loss.pctPerYear), unitCost: loss.chargePerCollar });
+        paths = ["vf.collarLoss.pctPerYear", "vf.collarLoss.chargePerCollar", ...headPaths(a, line.classes)];
+      } else if (id === "collarBatteries") {
+        paths = [`costs.${id}.unitCost`, "vf.batteriesPerCollar", ...headPaths(a, line.classes)];
+      }
+    } else if (m === "eid" && ["cowTags", "calfTags", "retags"].includes(id)) {
+      const classes = id === "calfTags" ? ["calvesBorn"] : cowClasses;
+      Object.assign(line, { basis: "perDevice", classes, unitCost: a.eid?.tagPrice, tag: true });
+      if (id === "cowTags") line.perAnimal = true;
+      if (id === "retags") line.qtyPerHead = num(a.eid?.retagPct);
+      paths = ["eid.tagPrice", ...(id === "retags" ? ["eid.retagPct"] : []), ...headPaths(a, classes)];
+    }
+    line.paths = c.paths ?? paths ?? costPaths(a, id, line);
+    return line;
+  });
+}
+
+/** A water block's cap on its share of runs avoided (9.3): (runs a week − minimum visits) ÷ runs a week; 0 with no runs. */
+export function shareCap(block) {
+  const runs = num(block.runsPerWeek);
+  return runs > 0 ? Math.max(0, (runs - num(block.minVisitsPerWeek)) / runs) : 0;
+}
+
+/**
+ * The share of a block's runs avoided that the analysis uses (9.3): as entered, at most its cap. A blank share is 0, as
+ * is the default of a block flagged for freezing or the feeding route.
+ */
+export const shareUsed = (block) => Math.min(num(block.shareAvoided), shareCap(block));
+
+/**
+ * The water module's benefit lines (B7, 9.3 Water runs and vehicle). Runs avoided, Σ_b runsPerWeek × weeks ×
+ * capped share, are the claim on waterRuns (the vehicle line) and the source of the hours saved (runHours, which takes
+ * the pool's scale but adds no claim). Vehicle: runs avoided × miles per run × variable cost per mile; hours saved:
+ * runs avoided × hours per run, each per run averaged over the blocks by runs avoided.
+ */
+function waterLines(a) {
+  const w = a.water ?? {}, list = w.blocks ?? [];
+  const blocks = list.map((b) => ({ b, avoided: num(b.runsPerWeek) * num(b.weeks) * shareUsed(b) }));
+  const avoided = sum(blocks.map((x) => x.avoided));
+  const perRun = (f) => (avoided > 0 ? sum(blocks.map((x) => x.avoided * num(x.b[f]))) / avoided : 0);
+  const blockPaths = (f) => list.flatMap((b, i) => ["runsPerWeek", "weeks", "shareAvoided", f].map((k) => `water.blocks.${i}.${k}`));
+  // The vehicle counts 0 because of a blank (9.5 item 4) when its cost per mile is blank, or when it avoids no runs and
+  // a block that could avoid runs (one with runs and a cap above 0) has its share blank. A blank share beside a block
+  // that still avoids runs is listed under its own label instead.
+  const withRuns = list.filter((b) => num(b.runsPerWeek) * num(b.weeks) > 0);
+  const sharesBlank = avoided === 0 && withRuns.some((b) => blank(b.shareAvoided) && shareCap(b) > 0);
+  return [
+    { id: "vehicle", label: "Vehicle", kind: "cash", pool: "waterRuns", claim: () => avoided,
+      valuePerUnit: () => perRun("milesPerRun") * num(w.variableCostPerMile), missing: blank(w.variableCostPerMile) || sharesBlank,
+      paths: [...blockPaths("milesPerRun"), "water.variableCostPerMile"] },
+    { id: "runHours", label: "Hours saved on water runs", kind: "hours", pool: "waterRuns", derived: true,
+      claim: () => avoided, hoursPerUnit: perRun("hoursPerRun"), paths: blockPaths("hoursPerRun") },
+  ];
+}
+
+/**
+ * The page's warnings on the water blocks (9.5 item 11): a share above 0% on a block flagged for freezing or the
+ * feeding route, and a share typed above its block's cap on a block with runs (the cap is what counts, 9.3).
+ */
+function waterNotices(a) {
+  const found = [];
+  for (const b of a.water?.blocks ?? []) {
+    const share = num(b.shareAvoided);
+    if (b.freezeOrFeedRoute && share > 0) found.push({ type: "freezeShare", block: b.name, share });
+    if (num(b.runsPerWeek) * num(b.weeks) > 0 && share > shareCap(b) + EPS) {
+      found.push({ type: "shareAboveCap", block: b.name, cap: shareCap(b), share });
+    }
+  }
+  return found;
+}
+
+/**
+ * The virtual fence's hours saved (9.3 Labor): the moving and gathering hours cut, the module's one claim on
+ * gatherHours, and the health-check riding hours cut, outside the pool, which support paid hours cut only with a
+ * validated alert function (vf.validatedAlert). The fence line comes from fenceLine().
+ */
+function vfLines(a) {
+  const v = a.vf ?? {};
+  return [
+    { id: "gatherHoursCut", label: "Moving and gathering hours cut", kind: "hours", pool: "gatherHours",
+      claim: (t) => num(at(v.gatherHoursCut, t)), paths: ["vf.gatherHoursCut"] },
+    { id: "healthCheckHoursCut", label: "Health-check riding hours cut", kind: "hours", eligible: v.validatedAlert === true,
+      claim: (t) => num(at(v.healthCheckHoursCut, t)), paths: ["vf.healthCheckHoursCut"] },
+  ];
+}
+
+/**
+ * The EID module's benefit lines (B4a, 9.3 EID lines and premium). Net program premium: head in program (calves sold)
+ * × (sale weight × premium − verification fee). Dosing savings: Σ over the classes in dosing.applications of head ×
+ * applications × saving per application. Recording time today: hours saved.
+ */
+function eidLines(a) {
+  const e = a.eid ?? {}, p = e.premium ?? {}, d = e.dosing ?? {};
+  const apps = Object.entries(d.applications ?? {});
+  return [
+    { id: "premium", label: "Net program premium", kind: "cash", claim: (t) => num(at(a.classes?.calvesSold?.head, t)),
+      valuePerUnit: () => num(p.saleCwt) * num(p.premiumPerCwt) - num(p.verificationFee),
+      // A blank counts as 0 (9.5 item 7): with the sale weight or the premium blank, the line is the verification fee
+      // alone, and it is listed as not entered only while that leaves it at 0 (9.5 item 4).
+      missing: (blank(p.saleCwt) || blank(p.premiumPerCwt)) && num(p.verificationFee) === 0,
+      paths: ["classes.calvesSold.head", "eid.premium.saleCwt", "eid.premium.premiumPerCwt", "eid.premium.verificationFee"] },
+    { id: "dosing", label: "Dosing savings", kind: "cash", claim: () => 1,
+      valuePerUnit: (t) => sum(apps.map(([c, n]) => num(at(a.classes?.[c]?.head, t)) * num(n))) * num(d.perApplication),
+      missing: blank(d.perApplication) || !apps.some(([, n]) => !blank(n)), // a count typed as 0 is entered
+      paths: ["eid.dosing.perApplication", ...apps.flatMap(([c]) => [`eid.dosing.applications.${c}`, `classes.${c}.head`])] },
+    { id: "recordingHours", label: "Recording time today", kind: "hours", claim: (t) => num(at(e.recordingHoursToday, t)),
+      paths: ["eid.recordingHoursToday"] },
+  ];
+}
+
+/**
+ * The classes "Does the EID rule apply to cattle you move?" is asked for (9.4): the inventory classes with head above
+ * 0 in some year 0..T, never the sale flows, in the class order of 9.2.
+ */
+export function eidRuleClasses(a) {
+  const years = [...Array(a.settings.T + 1).keys()];
+  return Object.keys(CLASS_NAMES).filter((c) => !SALE_FLOWS.includes(c)
+    && years.some((t) => num(at(a.classes?.[c]?.head, t)) > 0));
+}
+
+/**
+ * Free tags (B4a, 9.3): in each listed billing year t, up to freeTags.qty tags (entry t of an array) cost $0. They go
+ * first to the tags billed that year on the cow-tag line, then the calf tags, then the retags, whether or not the rule
+ * applies; tags not used in a year do not carry over. Lowers each tag line's cost by year, in place.
+ */
+function applyFreeTags(a, lines, schedules, T) {
+  const f = a.eid?.freeTags;
+  if (a.module !== "eid" || !f) return;
+  const left = zeros(T);
+  for (const y of f.years ?? []) if (Number.isInteger(y) && y >= 0 && y <= T) left[y] = num(at(f.qty, y));
+  for (const id of ["cowTags", "calfTags", "retags"]) {
+    const line = lines.find((l) => l.id === id && l.tag);
+    const full = line && schedules.get(line);
+    if (!full) continue;
+    for (const b of full.purchases ?? full.bills) {
+      const free = Math.min(left[b.year], b.qty);
+      if (!(free > 0)) continue;
+      full.cost[b.year] -= free * b.unitCost;
+      left[b.year] -= free;
+    }
+  }
+}
+
+/** The inputs the handling hours multiply (9.3 Labor), for the provenance rules. */
+function handlingPaths(a, h) {
+  return [...new Set([...(h.events ?? []).flatMap((e, i) => [...["timesPerYear", "minutesPerHead", "crewSize"].map((f) => `labor.handling.events.${i}.${f}`),
+    ...headPaths(a, e.classes ?? [])]),
+  ...["gathers", "gatherRiders", "hoursPerGather", "trainingDays", "trainingRiders", "hoursPerDay"].map((f) => `labor.handling.${f}`)])];
+}
+
+/**
+ * Handling hours by year (9.3 Labor; virtual fence and EID): Σ over the events of times a year × the head of its classes
+ * × minutes per head × crew ÷ 60, plus gathers × riders × hours per gather, plus training days × riders × hours per
+ * day. They fall at year end in the module's operating years s+1..T, and only in a year with head-months. Training
+ * days given by year take entry t; a single number applies in every operating year.
+ */
+export function handlingHours(a, herd, s, T) {
+  const h = a.labor?.handling;
+  return [...Array(T + 1).keys()].map((t) => {
+    if (!h || t <= s || !(herd.HM[t] > 0)) return 0;
+    const events = sum((h.events ?? []).map((e) => num(e.timesPerYear) * sum((e.classes ?? []).map((c) => herd.head(c, t)))
+      * num(e.minutesPerHead) * num(e.crewSize) / 60));
+    return events + num(h.gathers) * num(h.gatherRiders) * num(h.hoursPerGather)
+      + num(at(h.trainingDays, t)) * num(h.trainingRiders) * num(h.hoursPerDay);
+  });
+}
+
 // ---------------------------------------------------------------- lines and analysis
 
 /**
- * The analysis's lines (9.2): its stored cost lines, then the labor lines derived from a.labor with their fixed ids
- * (added:<i> for each paid added item, laborCut, avoidedHire), the hours saved that no module input covers
- * (otherHoursSaved, kind "hours"), and the capacity line hoursFreed.
+ * The analysis's lines (9.2): its cost lines, with the quantities, classes and prices its module derives (9.4); the
+ * module's benefit lines and hours saved (water: vehicle and the hours of the runs avoided; virtual fence: the fence
+ * and the hours cut; EID: premium, dosing and recording time); the labor lines derived from a.labor with their fixed
+ * ids (handling and added:<i> when paid, laborCut, avoidedHire); the hours saved that no module input covers
+ * (otherHoursSaved, kind "hours"); weight gain and the risk lines; and the capacity line hoursFreed.
  * A cost line is either stored ({timing, basis, unitCost, qty, ...}) or derived ({flow: (t, ctx) => $}).
  * A benefit line has claim(t, ctx) and valuePerUnit(t, ctx) and counts in the module's operating years s+1..T
  * (hoursFreed also in year s, where unpaid setup hours fall). A line of kind "hours" adds claim(t, ctx) × hoursPerUnit
@@ -307,10 +538,19 @@ export function poolBaseline(pool, a, T) {
  */
 export function buildLines(a) {
   const s = a.startYear ?? 0, T = a.settings.T;
-  const lines = Object.entries(a.costs ?? {}).map(([id, c]) => ({ ...c, id, kind: "cost", paths: c.paths ?? costPaths(a, id, c) }));
+  const lines = moduleCostLines(a);
   if (a.module === "vf" && num(a.vf?.fence?.miles) > 0) lines.push(fenceLine(a));
+  if (a.module === "water") lines.push(...waterLines(a));
+  if (a.module === "vf") lines.push(...vfLines(a));
+  if (a.module === "eid") lines.push(...eidLines(a));
   const L = a.labor;
   if (L) {
+    const h = L.handling;
+    if (h?.doneBy === "paid") {
+      const rate = num(h.paidRate) * (1 + num(h.loadPct));
+      lines.push({ id: "handling", label: "Handling labor", kind: "cost", flow: (t, ctx) => ctx.handlingHours[t] * rate,
+        paths: ["labor.handling.paidRate", "labor.handling.loadPct", ...handlingPaths(a, h)] });
+    }
     (L.added ?? []).forEach((item, i) => {
       if (item.doneBy !== "paid") return;
       const rate = num(item.paidRate) * (1 + num(item.loadPct));
@@ -320,7 +560,8 @@ export function buildLines(a) {
     if (L.cut) {
       const pay = L.cut.laborUnit === "position" ? ["salary"] : ["hoursPerUnit", "paidRate"];
       lines.push({
-        id: "laborCut", label: LABOR_CUT_LABEL[a.module] ?? "Hired labor cut", kind: "cash",
+        // Not ramped itself: it follows the ramped hours through f_t (9.3 Labor).
+        id: "laborCut", label: LABOR_CUT_LABEL[a.module] ?? "Hired labor cut", kind: "cash", ramp: false,
         claim: (t, ctx) => ctx.unitsCut[t], valuePerUnit: () => cutValuePerUnit(L.cut),
         paths: ["unitsCut", ...pay.filter((f) => !(f === "hoursPerUnit" && L.cut.laborUnit === "hour")), "loadPct"]
           .map((f) => `labor.cut.${f}`),
@@ -345,12 +586,14 @@ export function buildLines(a) {
   (a.riskLines ?? []).forEach((r, i) => lines.push(riskLine(a, r, i, sharesCause(a, r))));
   if (a.module === "water") lines.push(fewerChecksLine(a));
   // The capacity line multiplies the owner's time rate by the hours freed, so its inputs are the rate and every input
-  // those hours come from: the hours saved, the paid hours cut and the unpaid added hours (9.3; the rounding rule, 7.3).
+  // those hours come from: the hours saved, the paid hours cut and the unpaid added and handling hours (9.3; the
+  // rounding rule, 7.3).
   const cutPaths = L?.cut && replacesPaidWork(L)
     ? ["labor.cut.unitsCut", ...(L.cut.laborUnit === "hour" ? [] : ["labor.cut.hoursPerUnit"])] : [];
-  const unpaidPaths = (L?.added ?? []).flatMap((item, i) => (item.doneBy === "paid" ? [] : [`labor.added.${i}.hours`]));
+  const unpaidPaths = [...(L?.added ?? []).flatMap((item, i) => (item.doneBy === "paid" ? [] : [`labor.added.${i}.hours`])),
+    ...(L?.handling && L.handling.doneBy !== "paid" ? handlingPaths(a, L.handling) : [])];
   lines.push({
-    id: "hoursFreed", label: "Hours freed", kind: "capacity", fromStartYear: true,
+    id: "hoursFreed", label: "Hours freed", kind: "capacity", fromStartYear: true, ramp: false, // from the ramped hours
     claim: (t, ctx) => ctx.hoursFreed[t], valuePerUnit: () => num(a.settings.oppCostPerHour),
     paths: [...new Set(["settings.oppCostPerHour", ...lines.filter((l) => l.kind === "hours").flatMap((l) => l.paths ?? []),
       ...cutPaths, ...unpaidPaths])],
@@ -449,15 +692,21 @@ export function fenceCost(fence, b, T, H = T, endResidual = null) {
 /**
  * The fence benefit by year (9.3 Fence): avoided, fenceCost_k; deferred by d, fenceCost_k − fenceCost_{k+d}. On a
  * leased unit (from landUnitsOf), a landlord who maintains the fence makes the tenant's upkeep m 0, and a lease that
- * ends at T' with no renewal expected runs both streams to T', with the unit's fenceReimbursement as the residual at
- * T', so every fence flow after T' is 0. Returns { capital, upkeep }.
+ * ends at T' with no renewal expected runs both streams to T' (no purchase in year T' or later), so every fence flow
+ * after T' is 0. The residual at T' is the unit's fenceReimbursement when the tenant builds, and the straight-line
+ * residual when the landlord provides the fence, whose stream is listed under "Received by others" (at T' = T, the
+ * whole stream of 10.1 row 22(a)). Returns { capital, upkeep }.
  */
 export function fenceStream(a, unit) {
   const f = a.vf.fence, T = a.settings.T;
   const leased = unit?.kind === "leased";
   const fence = { ...f, m: leased && unit.raw.fenceMaintainedBy === "landlord" ? 0 : f.m };
-  const H = unit?.end ?? T;
-  const endResidual = unit?.end != null ? num(unit.raw.fenceReimbursement) : null;
+  const tenantBuilds = !(leased && unit.raw.fenceBuiltBy === "landlord");
+  const end = unit?.end ?? null;
+  const H = end ?? T;
+  // fenceReimbursement is what the lease pays the tenant for the fence (9.2), so it is the residual of a fence the
+  // tenant builds; a landlord's fence keeps its straight-line residual at T' (judgment).
+  const endResidual = end !== null && tenantBuilds ? num(unit.raw.fenceReimbursement) : null;
   const avoided = fenceCost(fence, num(f.k), T, H, endResidual);
   if (f.mode !== "deferred") return avoided;
   const later = fenceCost(fence, num(f.k) + num(f.d), T, H, endResidual);
@@ -477,7 +726,7 @@ function fenceLine(a) {
   let stream = null;
   return {
     id: "fence", label: f.mode === "deferred" ? "Interior fence deferred" : "Interior fence avoided", kind: "cash",
-    pool: "fenceMiles", fence: true, anyYear: true, requiresCattle: false,
+    pool: "fenceMiles", fence: true, anyYear: true, requiresCattle: false, ramp: false, // avoided capital is not ramped
     claim: () => miles,
     valuePerUnit: (t, ctx) => {
       stream = stream ?? fenceStream(a, fenceUnitOf(a, landUnitsOf(a)));
@@ -580,8 +829,8 @@ function costPaths(a, id, c) {
   const paths = [`costs.${id}.unitCost`];
   if (c.basis === "perDevice" && !(c.classes ?? []).length) paths.push(`costs.${id}.qty`);
   for (const k of c.basis === "fixed" ? [] : c.classes ?? []) {
-    if (a.module === "vf") paths.push(`enrolled.${k}.head`, `enrolled.${k}.months`);
-    else paths.push(`classes.${k}.head`, ...(c.basis === "perHeadMonth" ? [`served.${k}.months`] : []));
+    const months = c.basis === "perHeadMonth" ? [`${a.module === "vf" ? "enrolled" : "served"}.${k}.months`] : [];
+    paths.push(a.module === "vf" ? `enrolled.${k}.head` : `classes.${k}.head`, ...months);
   }
   return paths;
 }
@@ -589,15 +838,16 @@ function costPaths(a, id, c) {
 /**
  * Runs the analysis on the given lines (buildLines(a), plus any test fixtures). Assumes validate(a) found no errors.
  * Each benefit line's claim in year t goes through the order of operations of 9.3 as built so far: the raw claim;
- * the land-unit split, with a leased unit's part 0 after its lease ends (F6); the cattle-presence rule (0 in a year
- * t ≥ 1 with no head-months, for a line that requires cattle); the pool's single-module clamp, or the combine() scale
- * passed in opts.scales ({ [pool]: scale by year }), which replaces it (9.6); × valuePerUnit; and the operator share
- * (F6). The ramp (B3) comes later. Hours saved take the same factors up to the scale, and paid hours cut and cash
- * labor saved follow them through f_t (9.3 Labor). A cost line is split by land unit too, with its operator share.
+ * the land-unit split, with a leased unit's part 0 after its lease ends (F6); the ramp (B3; not for a line marked
+ * `ramp: false`); the cattle-presence rule (0 in a year t ≥ 1 with no head-months, for a line that requires cattle);
+ * the pool's single-module clamp, or the combine() scale passed in opts.scales ({ [pool]: scale by year }), which
+ * replaces it (9.6); × valuePerUnit; and the operator share (F6). Hours saved take the same factors up to the scale,
+ * and paid hours cut and cash labor saved follow them through f_t (9.3 Labor). A cost line is split by land unit too, with its operator share.
  * Returns the operator's series by year (C cost, B cash benefit, R residual, X expected losses avoided, K capacity
  * value, P production, N = B + R − C), their present values, cash NPV, BCR, IRR and payback on N, the head-months
- * HM, the labor hours by year, each pool's { baseline, claims, scale } (claims before the clamp), each line's series
- * and PV, the amounts that are not the operator's (paidByOthers, receivedByOthers: [{lineId, unitId, series, pv}],
+ * HM, the labor hours by year (with the handling hours), each pool's { baseline, claims, scale } (claims before the
+ * clamp), each line's series and PV with its operator's part on each land unit (byUnit: [{unitId, series, ...}], so the
+ * page can show each line by land unit), the amounts that are not the operator's (paidByOthers, receivedByOthers: [{lineId, unitId, series, pv}],
  * hours with pv null for hoursFreed), and notices for the page.
  */
 export function analyzeLines(a, lines, opts = {}) {
@@ -622,14 +872,29 @@ export function analyzeLines(a, lines, opts = {}) {
     for (const u of units.filter((x) => waterCare(x))) {
       notices.push({ type: "waterCare", unit: u.n, reason: u.raw.waterBy === "landlord" ? "landlord" : "leaseRate" });
     }
+    notices.push(...waterNotices(a));
   }
+  // B4a: a "yes" to the EID rule question changes no line until B4b; it shows the pending-verification notice (9.4).
+  if (a.module === "eid" && eidRuleClasses(a).some((c) => a.eid?.ruleApplies?.[c] === true)) notices.push({ type: "eidRulePending" });
 
   // Cattle-presence rule (9.3): in a year t ≥ 1 with no head-months, a line that requires cattle counts 0.
   const noCattle = (t) => t >= 1 && !(herd.HM[t] > 0);
   for (const t of years) if (noCattle(t)) notices.push({ type: "noCattle", year: t });
   const cattle = (line, t) => (line.requiresCattle !== false && noCattle(t) ? 0 : 1);
   const counts = (line, t) => line.anyYear || operating(t) || (line.fromStartYear && t === s);
-  const claimed = (line, t) => (counts(line, t) ? line.claim(t, ctx) * area(line, t) * cattle(line, t) : 0);
+  // Ramp (B3, 9.3): ramp[i] in the module's i-th operating year, year s + i, for i = 1..3; 1 from year s + 4 on (it is
+  // not carried forward). An absent entry takes the default, 1 (9.2); a cleared one counts as 0, like any other
+  // cleared advanced input (9.5 item 7).
+  const rampAt = (t) => {
+    const v = t - s >= 1 && t - s <= 3 ? a.ramp?.[t - s] : undefined;
+    return v === undefined ? 1 : num(v);
+  };
+  const ramped = (line, t) => (line.ramp === false ? 1 : rampAt(t));
+  // Each ramp entry is its own input, path "ramp.<i>" (9.2: the ramp is not a per-year array; 9.5 item 8 records
+  // "ramp.1"). An entry is an input of a line only when it lowers an operating year within the horizon (a blank
+  // entry, which counts as 0, among them).
+  const rampPaths = [1, 2, 3].filter((i) => s + i <= T && a.ramp?.[i] !== undefined && rampAt(s + i) < 1).map((i) => `ramp.${i}`);
+  const claimed = (line, t) => (counts(line, t) ? line.claim(t, ctx) * area(line, t) * ramped(line, t) * cattle(line, t) : 0);
 
   // Pools (9.6): the claims after the split and the cattle-presence rule, against the baseline split the same way,
   // then the clamp to the baseline or the combine() scale.
@@ -665,7 +930,7 @@ export function analyzeLines(a, lines, opts = {}) {
   // ctx holds the hours before the land-unit split; the laborCut and hoursFreed lines are split like any other line.
   const hourLines = lines.filter((l) => l.kind === "hours");
   const rawHours = (line, t) => (operating(t) ? line.claim(t, ctx) * (line.hoursPerUnit ?? 1) : 0);
-  const factor = (line, t) => cattle(line, t) * scaled(line, t);
+  const factor = (line, t) => ramped(line, t) * cattle(line, t) * scaled(line, t);
   const hoursSum = (ls, t, f) => sum(ls.map((l) => rawHours(l, t) * f(l, t)));
   const eligible = hourLines.filter((l) => l.eligible !== false);
   const savedBeforeSplit = years.map((t) => hoursSum(hourLines, t, factor));
@@ -678,8 +943,11 @@ export function analyzeLines(a, lines, opts = {}) {
   ctx.unitsCut = years.map((t) => (cut && replacesPaidWork(labor) && operating(t)
     ? num(at(cut.unitsCut, t)) * ctx.laborFactor[t] : 0));
   ctx.paidHoursCut = ctx.unitsCut.map((u) => (u ? u * hoursPerUnit(cut) : 0));
+  ctx.handlingHours = handlingHours(a, herd, s, T);
+  const handlingPaid = labor.handling?.doneBy === "paid";
   const addedBy = (paid) => years.map((t) => sum((labor.added ?? [])
-    .filter((item) => (item.doneBy === "paid") === paid).map((item) => addedHours(item.hours, t, s, T))));
+    .filter((item) => (item.doneBy === "paid") === paid).map((item) => addedHours(item.hours, t, s, T)))
+    + (handlingPaid === paid ? ctx.handlingHours[t] : 0));
   ctx.paidHoursAdded = addedBy(true);
   ctx.unpaidHoursAdded = addedBy(false);
   ctx.hoursFreed = years.map((t) => (noCattle(t) ? 0 : savedBeforeSplit[t] - ctx.paidHoursCut[t] - ctx.unpaidHoursAdded[t]));
@@ -692,38 +960,46 @@ export function analyzeLines(a, lines, opts = {}) {
   const others = (list, line, u, xs, money = true) => {
     if (xs.some((x) => Math.abs(x) > EPS)) list.push({ lineId: line.id, unitId: u.id, series: xs, pv: money ? npv(rate, xs) : null });
   };
+  // Cost lines as scheduled (F5), then the free tags (B4a), which lower the tag lines before they are split.
+  const startOf = (line) => (blank(line.startYear) ? s : line.startYear);
+  const schedules = new Map(lines.filter((l) => l.kind === "cost").map((line) => {
+    const ls = startOf(line);
+    if (line.flow) return [line, { cost: years.map((t) => line.flow(t, ctx)), residual: zeros(T) }];
+    const full = line.timing === "capital" ? scheduleCapital(line, T, ls, herd) : billAnnual(line, T, ls, herd);
+    // A blank price is listed only where it is used: a line whose quantity is 0 in every year changes nothing (9.5 item 7).
+    if (full.blankPrice) notices.push({ type: "quoteRequired", lineId: line.id });
+    if (full.commitPastHorizon) {
+      notices.push({ type: "commitPastHorizon", lineId: line.id, label: line.label ?? line.id, horizon: T,
+        commitYears: line.commitYears, fee: num(line.earlyTerminationFee) });
+    }
+    if (line.basis === "perHeadYear") notices.push(...shortMonths(line, herd, ls, T));
+    return [line, full];
+  }));
+  applyFreeTags(a, lines, schedules, T);
+
   for (const line of lines) {
-    const base = { id: line.id, label: line.label, kind: line.kind, paths: line.paths ?? [], missing: !!line.missing };
+    // A benefit line other than the fence also rests on the ramp entries, directly or through the ramped hours (B3).
+    const paths = [...(line.paths ?? []), ...(["cost", "hours"].includes(line.kind) || line.fence ? [] : rampPaths)];
+    const base = { id: line.id, label: line.label, kind: line.kind, paths, missing: !!line.missing };
     if (line.kind === "hours") {
       out.push({ ...base, hours: years.map((t) => rawHours(line, t) * area(line, t) * factor(line, t)) });
     } else if (line.kind === "cost") {
-      const ls = blank(line.startYear) ? s : line.startYear;
-      let full;
-      if (line.flow) full = { cost: years.map((t) => line.flow(t, ctx)), residual: zeros(T) };
-      else {
-        full = line.timing === "capital" ? scheduleCapital(line, T, ls, herd) : billAnnual(line, T, ls, herd);
-        // A blank price is listed only where it is used: a line whose quantity is 0 in every year changes nothing (9.5 item 7).
-        if (full.blankPrice) notices.push({ type: "quoteRequired", lineId: line.id });
-        if (full.commitPastHorizon) {
-          notices.push({ type: "commitPastHorizon", lineId: line.id, label: line.label ?? line.id, horizon: T,
-            commitYears: line.commitYears, fee: num(line.earlyTerminationFee) });
-        }
-        if (line.basis === "perHeadYear") notices.push(...shortMonths(line, herd, ls, T));
-      }
-      const cost = zeros(T), residual = zeros(T);
+      const ls = startOf(line), full = schedules.get(line);
+      const cost = zeros(T), residual = zeros(T), byUnit = [];
       for (const part of costParts(line, units, full, ls, herd, T)) {
         const sh = shareOf(line, part.u);
         years.forEach((t) => { cost[t] += sh * part.cost[t]; residual[t] += sh * part.residual[t]; });
+        byUnit.push({ unitId: part.u.id, series: part.cost.map((x) => sh * x), residual: part.residual.map((x) => sh * x) });
         others(paidByOthers, line, part.u, years.map((t) => (1 - sh) * (part.cost[t] - part.residual[t])));
       }
       cost.forEach((x, t) => (series.C[t] += x));
       residual.forEach((x, t) => (series.R[t] += x));
-      out.push({ ...base, series: cost, residual, purchases: full.purchases, pv: npv(rate, cost), pvResidual: npv(rate, residual) });
+      out.push({ ...base, series: cost, residual, byUnit, purchases: full.purchases, pv: npv(rate, cost), pvResidual: npv(rate, residual) });
     } else {
       // Steps 1 and 3–5, then each part (step 2) × valuePerUnit (6) × its operator share (7).
-      const before = years.map((t) => (counts(line, t) ? line.claim(t, ctx) * cattle(line, t) * scaled(line, t) : 0));
+      const before = years.map((t) => (counts(line, t) ? line.claim(t, ctx) * ramped(line, t) * cattle(line, t) * scaled(line, t) : 0));
       const value = years.map((t) => (before[t] ? line.valuePerUnit(t, ctx) : 0));
-      const claims = zeros(T), operatorClaims = zeros(T), flow = zeros(T);
+      const claims = zeros(T), operatorClaims = zeros(T), flow = zeros(T), byUnit = [];
       for (const { u, w } of partsOf.get(line)) {
         const sh = shareOf(line, u);
         const partClaims = years.map((t) => before[t] * w(t));
@@ -732,11 +1008,12 @@ export function analyzeLines(a, lines, opts = {}) {
           operatorClaims[t] += sh * partClaims[t];
           flow[t] += sh * partClaims[t] * value[t];
         });
+        byUnit.push({ unitId: u.id, claims: partClaims.map((c) => sh * c), series: partClaims.map((c, t) => sh * c * value[t]) });
         const rest = partClaims.map((c, t) => (1 - sh) * (line.kind === "capacity" ? c : c * value[t]));
         others(receivedByOthers, line, u, rest, line.kind !== "capacity");
       }
       flow.forEach((x, t) => (series[BY_KIND[line.kind]][t] += x));
-      out.push({ ...base, pool: line.pool ?? null, claims, operatorClaims, series: flow, pv: npv(rate, flow) });
+      out.push({ ...base, pool: line.pool ?? null, claims, operatorClaims, series: flow, byUnit, pv: npv(rate, flow) });
     }
   }
   if (a.labor && !replacesPaidWork(a.labor)) notices.push({ type: "absorbed" });
@@ -773,7 +1050,7 @@ export function analyzeLines(a, lines, opts = {}) {
     hoursFreedPerYear: T ? sum(operatorFreed.slice(1)) / T : 0,
     HM: herd.HM,
     hours: { saved: ctx.hoursSaved, paidCut: ctx.paidHoursCut.map((h, t) => h * unitArea(t)), paidAdded: ctx.paidHoursAdded,
-      unpaidAdded: ctx.unpaidHoursAdded, freed, factor: ctx.laborFactor },
+      unpaidAdded: ctx.unpaidHoursAdded, handling: ctx.handlingHours, freed, factor: ctx.laborFactor },
     pools,
     lines: out,
     paidByOthers,
@@ -872,8 +1149,9 @@ const yearIndex = (v) => Number.isInteger(v) && v >= 0;
 const show = (x) => (Math.round(x * 100) / 100).toLocaleString("en-US");
 
 /**
- * The 9.2 validation errors built so far: the horizon, start years, the F5 cost-line fields, the F1 labor fields, the
- * F3 class rules, and the F6 land-unit, operator-share and fence rules.
+ * The 9.2 validation errors built so far: the horizon, start years, the F5 cost-line fields, the F1 labor fields
+ * (with the handling labor's pay and training days), the F3 class rules, and the F6 land-unit, operator-share and
+ * fence rules.
  * Returns [{path, label, message}]: path is the input's path in the analysis, label its label on the page (9.4), and
  * message the text shown, which names the field unless it is the whole-years message. Nothing is computed while any
  * error remains. Later steps add their own rules (9.1). Trial values from the sensitivity features and the solver are
@@ -891,8 +1169,10 @@ export function validate(a) {
   if (!yearIndex(s)) err("startYear", startLabel, `${startLabel}: enter a whole number, 0 or more.`);
   else if (tOk && s >= T) err("startYear", startLabel, `${startLabel}: must be before year ${T}, the end of the horizon.`);
 
-  for (const [id, line] of Object.entries(a.costs ?? {})) {
-    const p = `costs.${id}.`, name = line.label ?? id;
+  // The cost lines as the module builds them (9.3): with the timing, basis, classes, quantity and price the module
+  // fixes or derives, and without the lines its pricing model leaves out. Each is named by its label (9.4).
+  for (const line of moduleCostLines(a)) {
+    const id = line.id, p = `costs.${id}.`, name = lineLabel(a, id);
     if (!blank(line.startYear)) {
       if (!yearIndex(line.startYear)) err(p + "startYear", "Start year", `Start year (${name}): enter a whole number, 0 or more.`);
       else if (tOk && line.startYear >= T) {
@@ -935,19 +1215,24 @@ function lineLabel(a, id) {
   const labels = { laborCut: LABOR_CUT_LABEL[a.module] ?? "Hired labor cut", avoidedHire: "Avoided hire", production: "Weight gain",
     hoursFreed: "Hours freed", fewerChecks: "Losses from fewer physical checks", handling: "Handling labor",
     fence: a.vf?.fence?.mode === "deferred" ? "Interior fence deferred" : "Interior fence avoided" };
-  return labels[id] ?? a.costs?.[id]?.label ?? id;
+  return labels[id] ?? LINE_LABELS[a.module]?.[id] ?? a.costs?.[id]?.label ?? id;
 }
 
 /**
- * The F6 rules of 9.2: a leased unit's lease term; land-unit shares that sum to 1 (water and virtual fence); every
- * operator share within 0–1; and, while there are fence miles, the fence's life, its build year (not before the
- * module starts), the years deferred (deferred mode) and its land unit.
+ * The F6 rules of 9.2: a leased unit's lease term; one or more land units, with shares that sum to 1 (water and
+ * virtual fence); every operator share within 0–1; and, while there are fence miles, the fence's life, its build year
+ * (not before the module starts), the years deferred (deferred mode) and its land unit.
  */
 function validateLand(a, s, err) {
   const units = a.settings?.landUnits ?? [];
   units.forEach((u, i) => {
     if (u.kind === "leased" && !wholeYears(u.leaseYears)) err(`settings.landUnits.${i}.leaseYears`, "Lease term", YEARS_MESSAGE);
   });
+  // Water and virtual fence need one or more land units (9.2): a list emptied by removing its last unit is an error.
+  // (An analysis that holds no list, such as a test fixture, runs as one owned unit, landUnitsOf.)
+  if (a.module !== "eid" && Array.isArray(a.settings?.landUnits) && !units.length) {
+    err("settings.landUnits", "Land units", "Land units: add at least one land unit, owned or leased.");
+  }
   if (a.module !== "eid" && units.length) {
     const total = sum(units.map((u) => num(u.share)));
     if (Math.abs(total - 1) > 1e-9) {
@@ -1055,6 +1340,22 @@ function validateLabor(a, s, T, err) {
       }
       if (blank(hire.salary)) err("labor.avoidedHire.salary", "Salary", `Salary (Avoided hire): enter it, ${why}.`);
       if (blank(hire.loadPct)) err("labor.avoidedHire.loadPct", "Payroll load", `Payroll load (Avoided hire): enter it (0% if none), ${why}.`);
+    }
+  }
+
+  const h = L.handling;
+  if (h) {
+    if (h.doneBy === "paid") {
+      const why = "because a paid hand does the handling";
+      if (blank(h.paidRate)) err("labor.handling.paidRate", "Pay rate", `Pay rate (Handling labor): enter it, ${why}.`);
+      if (blank(h.loadPct)) err("labor.handling.loadPct", "Payroll load", `Payroll load (Handling labor): enter it (0% if none), ${why}.`);
+    }
+    if (Array.isArray(h.trainingDays)) {
+      const early = h.trainingDays.findIndex((d, t) => t <= s && num(d) > 0);
+      if (early >= 0) {
+        err("labor.handling.trainingDays", "Training days",
+          `Training days: year ${early} comes before year ${s + 1}, the module's first operating year, so it cannot have training days.`);
+      }
     }
   }
 

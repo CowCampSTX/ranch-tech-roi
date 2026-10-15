@@ -1,7 +1,9 @@
 // Page text for Ranch Tech ROI, built from analyze() and combine() output (docs/audit/phase1-spec.md, 9.5). Pure
 // functions, no DOM, so node tests check every string the page will show. Phase 1 adds to it step by step (9.1);
 // the page shows it from step 6. Built so far: the formats and names of 9.5 items 9 and 11; the notices of F1, F3,
-// F4, F5, F6 and F7 and the pool warnings of F9 (9.5 items 4 and 11); and the state texts, tiles and verdict of F8.
+// F4, F5, F6 and F7 and the pool warnings of F9 (9.5 items 4 and 11); the state texts, tiles and verdict of F8; and,
+// with the modules, the water-block warnings, the EID rule notice (B4a), the price labels (9.5 item 4) and the
+// examples' banners (9.5 item 5).
 import { CLASS_NAMES } from "./roi.js";
 
 const MINUS = "−";
@@ -54,6 +56,9 @@ export function money(x) {
   return signed(x, "$" + body);
 }
 
+/** A share stored as a fraction, shown as a percent: 0.5 → "50%", 0.255 → "25.50%" (9.2, 9.5 item 11). */
+export const percent = (x) => `${quantity(x * 100)}%`;
+
 /** A count with its unit, singular when it shows as 1 or −1: "1 year", "2 years", "−1 hour", "5 months". */
 export function count(n, unit) {
   const q = quantity(n);
@@ -65,6 +70,11 @@ export function joinAnd(items) {
   if (items.length < 2) return items.join("");
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+/** The B4a notice while the EID rule question is answered yes for any class (9.4, 10.1 row 36). */
+export const EID_RULE_NOTICE = "Compliance treatment is pending verification of the rule's current status. All tags are "
+  + "counted as project costs here, which may understate the case for EID if your tags are required anyway. Check with "
+  + "your state veterinarian.";
 
 /**
  * The text of a notice from analyze() or a warning from combine() (9.5 item 11), or null for a notice whose text
@@ -105,6 +115,13 @@ export function noticeText(n) {
     case "poolShared":
       return `${joinAnd(n.modules.map(moduleName))} claim the same ${poolName(n.pool)}: together ${quantity(n.claim)} `
         + `against a baseline of ${quantity(n.baseline)} in year ${n.year}, so each claim is scaled down in proportion.`;
+    case "freezeShare":
+      return `The ${n.block} block is marked 'tanks freeze / water checked on the feeding route', so its share of runs `
+        + `avoided is normally 0%. Check the ${percent(n.share)} you entered.`;
+    case "shareAboveCap":
+      return `The ${n.block} block's share of runs avoided is limited to ${percent(n.cap)} by the minimum visits; you entered ${percent(n.share)}.`;
+    case "eidRulePending":
+      return EID_RULE_NOTICE;
     case "baselinesDiffer":
       return `${joinAnd(n.modules.map(moduleName))} report different baselines for ${poolName(n.pool)} in year ${n.year} `
         + `(${joinAnd(n.values.map(quantity))}); the largest, ${quantity(n.largest)}, is used.`;
@@ -233,4 +250,31 @@ export function tiles(a, r) {
     ["IRR", irrText(r.irr)],
   );
   return out.map(([label, value]) => ({ label: `${label} (before tax)`, value }));
+}
+
+// ---------------------------------------------------------------- examples and price labels (9.5 items 4 and 5)
+
+const SYNTHETIC = "Made-up numbers for demonstration, not any real operation's data.";
+/** The banner of each example while the analysis is not yet the user's own (9.5 item 5). */
+export const EXAMPLE_BANNERS = {
+  ranchA: `Synthetic example ranch. ${SYNTHETIC}`,
+  ranchB: `Synthetic example ranch. ${SYNTHETIC}`,
+  ranchC: `Synthetic example ranch. ${SYNTHETIC}`,
+  ranchD: `Good-fit synthetic example: conditions where this technology is most likely to pay. ${SYNTHETIC} Check whether your operation matches.`,
+};
+
+/**
+ * The label of a price input (9.5 item 4), from its `prov` record: a synthetic placeholder; a vendor price reported
+ * second-hand; a published list price, followed by its note in parentheses when the value was rounded from it or
+ * computed from a pack price; or "your quote" for a typed price. The source part is the citation the page links to
+ * prov.url. null for a price with no record (blank: "Quote required", 9.5 item 7).
+ */
+export function priceLabel(prov) {
+  if (!prov) return null;
+  if (prov.placeholder) return "Synthetic placeholder, not a price. Replace with your quote.";
+  if (prov.cls === "D") return "your quote";
+  if (prov.cls !== "C") return null;
+  const cite = `${prov.src}, ${prov.pub}`;
+  if (prov.reported) return `Vendor information: reported price (${cite}), not a published list price. Not an endorsement. Replace with your quote.`;
+  return `Vendor information: published list price (${cite}). Not an endorsement. Replace with your quote.${prov.note ? ` (${prov.note})` : ""}`;
 }
