@@ -66,15 +66,19 @@ over years 0 to T. Built so far:
 
 | Part | Rule |
 |---|---|
-| Cost lines | Each cost is its own line: capital (bought) or annual (billed each season), with a quantity that is fixed (1) or per device. A blank price is not counted and is listed as "Quote required", unless the line has no quantity in any year. A blank start year or billing takes the default. |
+| Cost lines | Each cost is its own line: capital (bought) or annual (billed each season), with a quantity that is fixed (1), per device, or taken from head counts (below). A blank price is not counted and is listed as "Quote required", unless the line has no quantity in any year. A blank start year or billing takes the default. |
 | Capital purchases | Bought in the line's start year s. Each later rise in quantity is a new group of devices, counted against the largest quantity so far (for items that leave with the animal, against the year before). Each group is bought again every L years, its life, while that year is before T; with no life entered, it is bought once. |
 | Repairs | repair % × the purchase's cost, in each year the purchase is in service |
 | Residual at T | from each group's last purchase: straight line, cost × (life left at T ÷ L), between 0 and 100%; none; a % of cost; or a dollar amount for the whole line. It is its own series, R. |
 | Annual lines | Season t (t = s + 1 … T) costs that season's price × quantity, billed in year t − 1 in advance (the default for subscriptions and service fees) or in year t in arrears. Inside a commitment the billed quantity is at least the minimum; a commitment that runs past T charges its early-termination fee in year T. |
-| Labor cut (cash) | Only when the freed time replaces paid work: units cut × hours per unit × pay rate × (1 + payroll load), or units cut × salary × (1 + load) for a position. Until that question is answered the time is "absorbed" and counts as no cash. The paid hours cut cannot be more than the hours saved. |
+| Labor cut (cash) | Only when the freed time replaces paid work: units cut × hours per unit × pay rate × (1 + payroll load), or units cut × salary × (1 + load) for a position. Until that question is answered the time is "absorbed" and counts as no cash. The paid hours cut cannot be more than the hours saved, and they shrink with them in a year without cattle, when a claim is counted only up to its baseline, or when a shared claim is scaled down. |
 | Avoided hire (cash) | salary × (1 + load) in each year of a planned hire that is not made |
 | Added hours | Paid: hours × pay rate × (1 + load), a cost in the year they are worked. Unpaid: they lower the hours freed. A single number recurs in each operating year; hours given by year put setup time, such as install, in the start year. |
 | Hours freed (capacity) | hours saved − paid hours cut − unpaid hours added, in hours, valued at the owner's time rate in the economic view only, never as cash |
+| Head-months | Virtual fence: enrolled head × months enrolled, by class. Water and EID: head × months on the served pastures (12 by default), over the served classes. Calves sold and cull cows sold are sale flows drawn from other classes and never count. |
+| Head-based quantities | Per head-month: the head-months of the line's classes. Per head-year: their head × 12, with a warning when they are enrolled or served for fewer months; a committed minimum is then 12 × the minimum head. Per device from a class (such as calf tags): that class's head, and a purchase in year t buys for the season that ends at t + 1. |
+| No cattle | In any year after year 0 with no head-months, every benefit that needs cattle and the hours freed are 0, and the page says "No cattle in year t: benefits not counted." Costs are not zeroed: head-based ones fall to 0 on their own, and committed minimums are still billed. |
+| Shared savings | Each saving claims a physical quantity: water runs, moving and gathering hours, death loss by cause, or interior fence miles. A claim above the ranch's own baseline (runs today, hours today, losses on record, fence in the plan) is counted only up to it, with a warning; when the baseline is blank, the page asks for it. When two technologies claim the same quantity, each claim is scaled by baseline ÷ total claimed (at most 1), with a warning naming both, and the hours those claims save, with the paid hours cut they support, scale with them. |
 | Results | net cash N = cash benefits + residual − costs; cash NPV = Σ N<sub>t</sub> ÷ (1 + r)<sup>t</sup>; benefit-cost ratio = (PV of cash benefits + PV of residual) ÷ PV of costs; IRR and payback on N, as today |
 
 ## What the example shows
@@ -110,10 +114,11 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 50 tests. v1.test.mjs (15): today's model, its hand-checked case, the horizon
-                                # rule and the wording of the sources. roi.test.mjs (35): the phase-1 engine's
-                                # cost lines, billing, labor and validation, the same hand-checked
-                                # case, and Synthetic Ranch A's pinned cash NPV
+node --test tests/*.test.mjs    # 77 tests. v1.test.mjs (15): today's model, its hand-checked case, the horizon
+                                # rule and the wording of the sources. roi.test.mjs (53): the phase-1 engine's
+                                # cost lines, billing, labor, head counts, shared savings and validation,
+                                # the same hand-checked case, and Synthetic Ranch A's pinned cash NPV.
+                                # text.test.mjs (9): the notices and warnings the page will show
 ```
 
 ## Files
@@ -123,6 +128,7 @@ index.html        the page and its styles (light and dark mode, works on a phone
 app.js            page wiring: inputs, charts, tables, written-out formulas
 v1.js             today's model, which the page runs on: pure functions, no dependencies, shared with the tests
 roi.js            the phase-1 engine, being built step by step (see "The new engine" above); the page does not use it yet
+text.js           the page text the new engine's results will show: formats, names, notices and warnings
 tests/            node:test unit tests, including a small case checked by hand
 docs/             screenshots
 docs/audit/       the audit and improvement plan, and the phase-1 specification

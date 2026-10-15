@@ -100,7 +100,7 @@ test("the 12-month and 5-year outlook views are gone (F2)", () => {
 });
 
 test("no sentence calls every starting cost a published list price (F10 criterion 1)", () => {
-  for (const file of ["index.html", "README.md", "roi.js", "v1.js"]) {
+  for (const file of ["index.html", "README.md", "roi.js", "v1.js", "text.js"]) {
     const text = read(file).toLowerCase();
     for (const s of ["1,000-cow operation", "come from published", "starting values are published"])
       assert.ok(!text.includes(s), `${file} still says "${s}"`);
