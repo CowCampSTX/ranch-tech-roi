@@ -8,16 +8,17 @@ Ranch Tech ROI is a plain HTML and JavaScript calculator for ranch technology de
 
 - `index.html`: the page
 - `app.js`: page and DOM code
-- `roi.js`: the model (pure functions, no DOM, no dependencies)
-- `tests/roi.test.mjs`: tests, run in CI on Node 22 (`.github/workflows/test.yml`)
+- `roi.js`: the phase-1 engine, built step by step (pure functions, no DOM, no dependencies); the page moves to it in
+  build step 6
+- `v1.js`: today's model, which the page runs on until then, and the frozen `V1_FIELDS` and `V1_PRESETS` (B8)
+- `tests/*.test.mjs`: tests, run in CI on Node 22 (`.github/workflows/test.yml`): `roi.test.mjs` for the engine,
+  `v1.test.mjs` for today's model
 
 There is no framework, build step or package manager. Keep it that way unless a change solves a demonstrated problem.
 
 Run the tests from the repository root, as CI does:
 
-    node --test tests/roi.test.mjs
-
-If tests are split into more files, run them all with `node --test` and update the CI workflow to match.
+    node --test tests/*.test.mjs
 
 ## The plan is the spec
 
