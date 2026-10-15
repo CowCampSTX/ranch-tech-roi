@@ -12,8 +12,12 @@ Ranch Tech ROI is a plain HTML and JavaScript calculator for ranch technology de
   build step 6
 - `v1.js`: today's model, which the page runs on until then, and the frozen `V1_FIELDS` and `V1_PRESETS` (B8)
 - `text.js`: the page text built from the engine's output (DOM-free), from build step 3
+- `examples.js`: the four synthetic example ranches with their `prov`, and the vendor fills (DOM-free), from build
+  step 5
+- `state.js`: what each user action does to the state (pure, DOM-free), from build step 5
 - `tests/*.test.mjs`: tests, run in CI on Node 22 (`.github/workflows/test.yml`): `roi.test.mjs` for the engine,
-  `text.test.mjs` for the page text, `v1.test.mjs` for today's model
+  `modules.test.mjs` for the three modules on the example ranches, `examples.test.mjs` for the examples' provenance,
+  `state.test.mjs` for the user actions, `text.test.mjs` for the page text, `v1.test.mjs` for today's model
 
 There is no framework, build step or package manager. Keep it that way unless a change solves a demonstrated problem.
 

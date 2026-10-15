@@ -6,6 +6,8 @@ import {
   YEARS_MESSAGE, at, npv, analyze, analyzeLines, buildLines, scheduleCapital, billAnnual, billingOf, addedHours, validate,
   herdOf, poolBaseline, combine, irr, payback, firstFlowYear, valueOfGainFromQuotes, landUnitsOf,
 } from "../roi.js";
+import { example } from "../examples.js";
+import { setInput } from "../state.js";
 
 const close = (a, b, tol = 0.005) => assert.ok(Math.abs(a - b) <= tol, `${a} != ${b} (±${tol})`);
 const closeAll = (xs, ys, tol = 1e-9) => {
@@ -483,37 +485,12 @@ test("labor rules: an avoided hire needs whole years, a first year after the mod
 
 // ---------------------------------------------------------------- cross-check against Appendix A
 
-// Synthetic Ranch A's expected case (Appendix A). The water module comes with B7 (9.1 step 5). Until then its two
-// outputs are supplied here: the vehicle saving as a fixture line (88 summer runs × 50% avoided × 120 mi × $0.40/mi)
-// and its hours saved (44 runs × 6 h = 264 h) as other hours saved. Everything else is Ranch A's expected case.
-const ranchA = (landUnits = [{ id: "u1", kind: "owned", share: 1 }], more = {}) => ({
-  module: "water",
-  settings: { T: 10, discountRate: 0.07, oppCostPerHour: 20, landUnits }, startYear: 0,
-  classes: { cows: { head: 900, valuePerHead: 2700 } }, served: { cows: {} }, // 900 cows, served 12 months (the default)
-  riskLines: [{ cause: "water", class: "cows", eventsPerYear: 0.15, headPerEvent: 5, shareCaught: 0.75 }],
-  water: { blocks: [] },
-  costs: {
-    monitors: { label: "Monitors", timing: "capital", basis: "perDevice", qty: 10, unitCost: 1490, lifeYears: 10, repairPct: 0 },
-    mounting: { label: "Mounting", timing: "capital", basis: "fixed", unitCost: 750, lifeYears: null },
-    subscription: { label: "Subscription", timing: "annual", basis: "perDevice", qty: 10, unitCost: 365, billing: "advance" },
-    batteries: { label: "Batteries and repairs", timing: "annual", basis: "perDevice", qty: 10,
-      unitCost: [0, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0], billing: "arrears" },
-  },
-  labor: {
-    freedTimeUse: "replacesPaidWork",
-    cut: { laborUnit: "day", unitsCut: 16, hoursPerUnit: 8, paidRate: 18.72, loadPct: 0.1 },
-    otherHoursSaved: 264,
-    added: [{ label: "install", hours: [30, 0], doneBy: "unpaid" }, { label: "monitoring", hours: 52, doneBy: "unpaid" }],
-  },
-  ...more,
-});
-const vehicle = { id: "vehicle", label: "Vehicle", kind: "cash", claim: () => 44, valuePerUnit: () => 120 * 0.4 };
-const runRanchA = (a) => analyzeLines(a, [...buildLines(a), vehicle]);
+// Synthetic Ranch A's expected case (Appendix A), loaded from examples.js and run through the water module (B7).
 
 test("Synthetic Ranch A reproduces its pinned cash NPV, the NPV with losses avoided, Economic NPV, BCR and payback (Appendix A)", () => {
-  const a = ranchA();
+  const a = example("ranchA");
   assert.deepEqual(validate(a), []);
-  const r = runRanchA(a);
+  const r = analyze(a);
   close(r.cashNPV, -11079, 1);
   close(r.cashNPVWithRisk, -412, 1); // 0.15 events × 5 head × 0.75 caught × $2,700 a year
   close(r.economicNPV, 10788, 1);
@@ -522,35 +499,36 @@ test("Synthetic Ranch A reproduces its pinned cash NPV, the NPV with losses avoi
   assert.deepEqual(r.hours.freed, [-30, ...Array(10).fill(84)]); // 264 − 128 paid − 52 added; install in year 0
   close(r.pv.K, 11199.62, 0.005); // capacity: 84 h × $20 a year less the $600 install
   // Outage events cleared: cash NPV unchanged, the NPV with losses avoided falls to it, and the line is listed (9.7).
-  const cleared = runRanchA(ranchA(undefined, { riskLines: [{ ...a.riskLines[0], eventsPerYear: null }] }));
+  const cleared = analyze(setInput(a, "riskLines.0.eventsPerYear", null));
   close(cleared.cashNPV, -11079, 1);
   close(cleared.cashNPVWithRisk, -11079, 1);
   assert.deepEqual(cleared.notices.filter((n) => n.type === "notEntered").map((n) => n.label),
     ["Losses avoided (water)", "Losses from fewer physical checks"]); // each once; the second is blank by default
 });
 
-test("Synthetic Ranch A by land unit and operator share: rows 35 and 47(a) ahead of the water module (F6)", () => {
+test("Synthetic Ranch A by land unit and operator share: rows 35 and 47(a) (F6)", () => {
+  const ranchA = (landUnits, more = {}) => ({ ...example("ranchA"), ...more, settings: { ...example("ranchA").settings, landUnits } });
   // Row 35(a): a landowner pays half the subscription.
-  const half = ranchA();
+  const half = example("ranchA");
   half.costs.subscription.operatorShare = 0.5;
-  const r35a = runRanchA(half);
+  const r35a = analyze(half);
   close(r35a.cashNPV - -11079, 13715.30, 1);
   assert.deepEqual(r35a.paidByOthers.map((o) => [o.lineId, o.series[0]]), [["subscription", 1825]]);
   // Row 35(b): 6 water points owned, 4 leased for 3 years with no renewal expected.
-  const r35b = runRanchA(ranchA([{ id: "u1", kind: "owned", share: 0.6 }, { id: "u2", kind: "leased", leaseYears: 3, share: 0.4 }]));
+  const r35b = analyze(ranchA([{ id: "u1", kind: "owned", share: 0.6 }, { id: "u2", kind: "leased", leaseYears: 3, share: 0.4 }]));
   close(r35b.cashNPV, -19434, 1);
   close(r35b.cashNPVWithRisk, -11439, 1);
   assert.deepEqual(r35b.receivedByOthers, []); // the leased part after year 3 is no one's
   // Row 47(a): leased past T, the landlord provides and checks the water.
   const lease = [{ id: "u1", kind: "leased", leaseYears: 15, share: 1, waterBy: "landlord" }];
-  const r47 = runRanchA(ranchA(lease));
+  const r47 = analyze(ranchA(lease));
   close(r47.cashNPV, -44426, 1);
   const others = Object.fromEntries(r47.receivedByOthers.map((o) => [o.lineId, o.pv]));
   assert.deepEqual(Object.keys(others).sort(), ["hoursFreed", "laborCut", "vehicle"]);
   close(others.vehicle, 14834, 1);
   close(others.laborCut, 18513, 1);
   assert.equal(others.hoursFreed, null);
-  close(runRanchA(ranchA(lease, { benefitShares: { vehicle: 1 } })).cashNPV, -29592, 1);
+  close(analyze(ranchA(lease, { benefitShares: { vehicle: 1 } })).cashNPV, -29592, 1);
 });
 
 // ---------------------------------------------------------------- head-months and head-based quantities (F3, F5)
@@ -991,7 +969,12 @@ test("weight gain: lb a day × days × head sold × value of gain, in P unless f
 test("weight gain left blank counts 0 and is listed once; a water analysis has no production line (F4 1)", () => {
   const r = analyze(cowCalf(3, { production: { lbPerHeadPerDay: 0.2, classes: ["calvesSold"] } }));
   assert.deepEqual(r.P, [0, 0, 0, 0]);
-  assert.deepEqual(r.notices.filter((n) => n.type === "notEntered"), [{ type: "notEntered", lineId: "production", label: "Weight gain" }]);
+  // Listed once, after the EID module's own blank benefit lines, in the order of 9.4 (9.5 item 4).
+  assert.deepEqual(r.notices.filter((n) => n.type === "notEntered"), [
+    { type: "notEntered", lineId: "premium", label: "Net program premium" },
+    { type: "notEntered", lineId: "dosing", label: "Dosing savings" },
+    { type: "notEntered", lineId: "production", label: "Weight gain" },
+  ]);
   const water = analyze(analysis(3, 0.07, { module: "water", classes: { cows: { head: 100 }, calvesSold: { head: 90 } } }));
   assert.ok(!water.lines.some((l) => l.id === "production"));
   assert.ok(!water.notices.some((n) => n.lineId === "production"));
@@ -1237,11 +1220,13 @@ test("combine() compares baselines only among the analyses that claim the pool i
 });
 
 test("water care by the landlord: the lines that value water runs default to operator share 0 on that unit (9.3)", () => {
-  const vehicle = { id: "vehicle", label: "Vehicle", kind: "cash", claim: () => 1, valuePerUnit: () => 2112 };
+  // One season block: 22 weeks × 4 runs × 50% avoided = 44 runs × 120 mi × $0.40 = $2,112 a year of vehicle cost.
+  const water = { variableCostPerMile: 0.4,
+    blocks: [{ name: "summer", weeks: 22, runsPerWeek: 4, milesPerRun: 120, hoursPerRun: 0, minVisitsPerWeek: 0, shareAvoided: 0.5 }] };
   const risk = { cause: "water", class: "cows", eventsPerYear: 0.15, headPerEvent: 5, shareCaught: 1 };
-  const a = (unit, more = {}) => onLand(10, [unit], { classes: { cows: { head: 100, valuePerHead: 1500 } }, riskLines: [risk],
+  const a = (unit, more = {}) => onLand(10, [unit], { classes: { cows: { head: 100, valuePerHead: 1500 } }, riskLines: [risk], water,
     labor: { freedTimeUse: "replacesPaidWork", otherHoursSaved: 100 }, settings: { T: 10, discountRate: 0.07, oppCostPerHour: 20, landUnits: [unit] }, ...more });
-  const run = (x) => analyzeLines(x, [...buildLines(x), vehicle]);
+  const run = analyze;
   const landlord = run(a(leased("lease", 15, 1, { waterBy: "landlord" })));
   assert.equal(landlord.lines.find((l) => l.id === "vehicle").pv, 0);
   close(landlord.pv.X, npv(0.07, [0, ...Array(10).fill(1125)]), 1e-6); // the risk line stays the operator's
@@ -1291,4 +1276,55 @@ test("land-unit, operator-share and fence rules (9.2)", () => {
     ["vf.fence.landUnitId", "Land unit the fence is on", "Land unit the fence is on: choose one of the land units."],
   ]);
   assert.deepEqual(validate(fenced(7, { ...bad.vf.fence, miles: 0 }, [owned()])), []); // no fence miles, no fence rules
+});
+
+// ---------------------------------------------------------------- ramp (B3, 9.3)
+
+test("ramp 50/80/100 gives exactly 50%, 80% and 100% of each benefit line in years 1–3, then 100%; no cost changes (B3)", () => {
+  const kit = { label: "Kit", timing: "capital", basis: "fixed", unitCost: 2000 };
+  const a = (ramp) => analysis(5, 0.07, { costs: { kit }, ramp });
+  const run = (ramp) => analyzeLines(a(ramp), [...buildLines(a(ramp)), savings(1000)]);
+  const r = run([1, 0.5, 0.8, 1]);
+  closeAll(r.B, [0, 500, 800, 1000, 1000, 1000]);
+  assert.deepEqual(r.C, run(undefined).C); // the ramp changes no cost line
+  // ramp[3] is not carried forward: 100% from year 4.
+  closeAll(run([1, 0.5, 0.7, 0.9]).B, [0, 500, 700, 900, 1000, 1000]);
+  closeAll(run(undefined).B, [0, 1000, 1000, 1000, 1000, 1000]); // 1 by default
+});
+
+test("the ramp scales hours saved, and paid hours cut and hours freed follow it; the fence is not ramped (B3, 9.3 Labor)", () => {
+  const a = analysis(4, 0.07, { ramp: [1, 0.5, 1, 1], labor: { freedTimeUse: "replacesPaidWork", otherHoursSaved: 100,
+    cut: { laborUnit: "hour", unitsCut: 40, paidRate: 20, loadPct: 0 } } });
+  const r = analyze(a);
+  closeAll(r.hours.saved, [0, 50, 100, 100, 100]);
+  closeAll(r.hours.paidCut, [0, 20, 40, 40, 40]); // f_1 = 0.5
+  closeAll(r.lines.find((l) => l.id === "laborCut").series, [0, 400, 800, 800, 800]);
+  closeAll(r.hours.freed, [0, 30, 60, 60, 60]);
+  const fenceRun = analyze(fenced(7, fence({ k: 0, Lf: 4, m: 0.05 }), [owned()], { ramp: [1, 0.5, 0.5, 0.5] }));
+  closeAll(fenceRun.B, [34400, 1720, 1720, 1720, 36120, 1720, 1720, -6880]);
+});
+
+test("order of operations: 160 runs claimed on a 148-run baseline with ramp[1] 0.5 counts 80 runs in year 1, then 148 (9.3, 9.7)", () => {
+  const a = analysis(3, 0.07, { ...water(148), ramp: [1, 0.5, 1, 1] });
+  const r = analyzeLines(a, [...buildLines(a), runsLine(160, 5)]);
+  closeAll(r.lines.find((l) => l.id === "runs").claims, [0, 80, 148, 148]);
+  assert.deepEqual(r.notices.filter((n) => n.type === "poolClamp").map((n) => n.year), [2]); // no clamp in year 1
+});
+
+test("a module that starts in year 2: no benefit before year 3 but an avoided fence, and the ramp falls in years 3–5 (9.7)", () => {
+  const a = fenced(7, fence({ k: 2, Lf: 25, m: 0.05 }), [owned()], { startYear: 2, ramp: [1, 0.5, 0.8, 0.9] });
+  const r = analyzeLines(a, [...buildLines(a), savings(1000)]);
+  closeAll(r.lines.find((l) => l.id === "savings").series, [0, 0, 0, 500, 800, 900, 1000, 1000]);
+  assert.equal(fenceOf(r).series[2], 34400); // the fence falls in its build year, unramped
+});
+
+test("install hours: done by a paid hand they are a year-0 cost; done by the owner they lower year-0 capacity only (B3)", () => {
+  const install = (doneBy) => analysis(2, 0.07, { settings: { T: 2, discountRate: 0.07, oppCostPerHour: 20 },
+    labor: { added: [{ label: "Install", hours: [30, 0], doneBy, paidRate: 25, loadPct: 0 }] } });
+  const paid = analyze(install("paid"));
+  assert.deepEqual(paid.C, [750, 0, 0]);
+  assert.deepEqual(paid.K, [0, 0, 0]);
+  const owner = analyze(install("unpaid"));
+  assert.deepEqual(owner.C, [0, 0, 0]);
+  assert.deepEqual(owner.K, [-600, 0, 0]);
 });

@@ -63,7 +63,8 @@ changes over time. They can be folded into the inputs (for example, a lower hard
 `roi.js` holds the engine that phase 1 builds one step at a time from the specification in
 [`docs/audit/phase1-spec.md`](docs/audit/phase1-spec.md) (sections 9.2 and 9.3). The page moves to it in the last
 step and runs on today's model, `v1.js`, until then. Money is in today's dollars, before tax, at a real discount rate,
-over years 0 to T. Built so far:
+over years 0 to T. `examples.js` holds the four synthetic example ranches (A to D) with the source of each value, and
+`state.js` what each user action does to the state. Built so far:
 
 | Part | Rule |
 |---|---|
@@ -83,10 +84,15 @@ over years 0 to T. Built so far:
 | Weight gain | lb a day × days × head sold × value of gain, over the sold classes (calves sold, cull cows sold, and yearlings × the share sold). Value of gain is dollars per pound added, not the sale price per pound; from two weight-class quotes it is (W<sub>heavy</sub> × P<sub>heavy</sub> − W<sub>base</sub> × P<sub>base</sub>) ÷ (W<sub>heavy</sub> − W<sub>base</sub>), with the heavier weight above the base weight. It counts in the economic view only, unless it comes from the ranch's own records, when it is cash. |
 | Losses avoided | events a year × head per event × share caught × value per head, claimed against that cause's death loss (the lines of one cause share one baseline). An expected loss, never cash: it enters "cash NPV including expected losses avoided" and economic NPV, never cash NPV, BCR, IRR or payback. Water's optional losses from fewer physical checks subtract the same way. |
 | Land units and who pays | Each water and virtual fence line is split across the land units by their share of head-months or water points (EID lines are not split). For each unit's part, the operator's flow is the operator share (1 unless changed) × the flow; the rest is listed as paid or received by others and never enters a result. On a lease that ends within the horizon with no renewal expected, that unit's part of each benefit stops at the lease end; an improvement that stays with the land stops there too, with its share of the lease reimbursement as its residual. Where the landlord provides and checks the water, or water care is in the lease rate, the vehicle, labor and hours-freed savings there go to the landowner by default. |
-| Interior fence | Avoided: the cost of the fence the ranch would build, F × miles in build year k, rebuilt every Lf years, with upkeep m × cost a year, less its straight-line residual at T. Deferred by d: that stream less the same stream starting in year k + d. It lies whole on its own land unit: a landlord-built fence is the landlord's saving, a lease ending at T' stops the stream at T' with the lease's fence reimbursement as its residual, and a landlord who maintains it makes the upkeep 0. Its purchases count if the module has cattle in some year; its upkeep only in years with cattle. |
+| Interior fence | Avoided: the cost of the fence the ranch would build, F × miles in build year k, rebuilt every Lf years, with upkeep m × cost a year, less its straight-line residual at T. Deferred by d: that stream less the same stream starting in year k + d. It lies whole on its own land unit: a landlord-built fence is the landlord's saving, its whole stream listed under "Received by others". A lease ending at T' with no renewal expected stops the stream at T': when the tenant builds, the lease's fence reimbursement is its residual there, and a landlord-built fence keeps its straight-line residual at T'; and a landlord who maintains it makes the upkeep 0. Its purchases count if the module has cattle in some year; its upkeep only in years with cattle. |
 | Results | The operator's share only. Net cash N = cash benefits + residual − costs; cash NPV = Σ N<sub>t</sub> ÷ (1 + r)<sup>t</sup>; cash NPV including expected losses avoided adds their PV; economic NPV adds the PV of losses avoided, capacity value and production. Benefit-cost ratio = (PV of cash benefits + PV of residual) ÷ PV of costs (n/a with no costs); cost per head-month = PV of costs ÷ PV of head-months in years 1 to T. Amounts under half a cent count as 0. |
 | IRR | The rate at which the NPV of N is 0, found by bisection from the first year with cash flows. It is n/a with no cash flows, with no outlay in that first year, or with more than one sign change; "below 0%" when the nets sum to less than 0; and stated as above the search range past 10,000%. |
 | Payback | Counted from year 0: k − 1 + (−cumulative N<sub>k−1</sub> ÷ N<sub>k</sub>), where k is the first year from which cumulative N stays ≥ 0 through T. When the first cash flow comes after year 0, the text says so ("counted from year 0; the first cash flow is in year s₀"); when cumulative cash was positive and then negative again before k, a note says so. "None within T years" when cumulative cash is still negative at T; "no net outlay" when it is never negative. Discounted payback is the same on discounted N. |
+| Ramp | A benefit line's claim in the module's first three operating years (years s + 1 to s + 3) is multiplied by ramp[1], ramp[2] and ramp[3] (1 by default; a value above 1 is set to 1, and a cleared entry counts as 0), and is full from year s + 4 on. Every part of the hours saved is ramped, and the paid hours cut and hours freed follow them; costs and the avoided fence are not ramped. |
+| Water monitoring | For each season block, runs avoided = runs a week × weeks × share avoided, where the share used is at most (runs a week − minimum visits a week) ÷ runs a week. A block flagged for freezing or the feeding route counts 0 unless a share is typed, with a warning, and a share typed above the cap is counted at the cap, with a warning. The runs avoided are the claim on water runs. Vehicle (cash) = runs avoided × miles per run × variable cost per mile; hours saved = runs avoided × hours per run, the miles and hours per run averaged over the blocks by runs avoided. The monitors, subscription and batteries lines count the monitors. |
+| Virtual fence | The pricing model picks the lines: leased collars carry a subscription on the enrolled classes; purchased collars are bought for the enrolled head, with a service fee per collar in use billed in advance. Other lines, such as infrastructure or base stations, are entered as quoted. Collar batteries = batteries per collar × collars, and collar loss = loss % × enrolled head × charge per collar, each billed in arrears. The moving and gathering hours cut are the claim on gathering hours; health-check riding hours cut add to the hours saved, but support paid hours cut only with a validated alert function. The fence the virtual fence replaces is the interior fence line above. |
+| EID tags and scale | Cow tags are bought per cow (they leave with the animal), calf tags per calf born each season, and retags = retag % × the cows' head each season, all at the tag price; the calf tags and retags are billed in arrears. Free tags: in each listed billing year, up to the free quantity costs $0, going to cow tags, then calf tags, then retags, with no carry-over. Net program premium (cash) = calves sold × (sale weight in cwt × premium per cwt − verification fee). Dosing savings (cash) = Σ over classes of head × applications a year × saving per application. Recording time today is hours saved. Whether the EID rule applies is recorded for the cows and other inventory classes; until the rule's status is verified, every tag stays a project cost and the page says so. |
+| Handling hours | Virtual fence and EID: Σ over the handling events of times a year × head of its classes × minutes per head × crew ÷ 60, plus gathers × riders × hours per gather, plus training days × riders × hours per day, in each operating year with cattle. Done by a paid hand they are a cost at pay rate × (1 + load); otherwise they lower the hours freed. |
 
 ## What the example shows
 
@@ -121,13 +127,16 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 127 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
+node --test tests/*.test.mjs    # 212 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
                                 # rule, the wording of the sources, and the before-tax and example-rate labels.
-                                # roi.test.mjs (88): the phase-1 engine's cost lines, billing, labor, head
+                                # roi.test.mjs (93): the phase-1 engine's cost lines, billing, labor, head
                                 # counts, shared savings, metrics, weight gain, losses avoided, land units,
-                                # operator shares, the fence and validation, the same hand-checked case, and
-                                # Synthetic Ranch A's pinned results. text.test.mjs (23): the notices,
-                                # warnings, result texts, tiles and verdict the page will show
+                                # operator shares, the fence, the ramp and validation, and the same
+                                # hand-checked case. modules.test.mjs (45): the water, virtual fence and EID
+                                # modules on the four example ranches, with their pinned results.
+                                # examples.test.mjs (12): the examples' sources, placeholders and vendor
+                                # prices. state.test.mjs (23): the user actions. text.test.mjs (23): the
+                                # notices, warnings, result texts, tiles and verdict the page will show
 ```
 
 ## Files
@@ -139,6 +148,10 @@ v1.js             today's model, which the page runs on: pure functions, no depe
 roi.js            the phase-1 engine, being built step by step (see "The new engine" above); the page does not use it yet
 text.js           the page text the new engine's results will show: formats, names, notices, warnings,
                   result texts, tiles and the verdict
+examples.js       the four synthetic example ranches (A to D) for the new engine, with the source of each value
+                  and the published vendor prices a user can fill in
+state.js          what each user action does to the state: load, reset, type or clear a value, keep the rate or
+                  a placeholder, use a vendor price, remove an item
 tests/            node:test unit tests, including a small case checked by hand
 docs/             screenshots
 docs/audit/       the audit and improvement plan, and the phase-1 specification

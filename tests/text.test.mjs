@@ -244,7 +244,7 @@ test("a risk line with no cause is not entered and claims no pool (judgment)", (
   const r = analyze({ settings: { T: 2, discountRate: 0.07 }, module: "water", classes: { cows: { head: 100, valuePerHead: 1500 } }, served: { cows: {} },
     water: { blocks: [] }, riskLines: [{ class: "cows", eventsPerYear: 0.15, headPerEvent: 5, shareCaught: 1 }] });
   assert.ok(texts(r, "notEntered").includes("Losses avoided: not entered, not counted"));
-  assert.deepEqual(Object.keys(r.pools), []);
+  assert.deepEqual(Object.keys(r.pools).filter((k) => k.startsWith("deathLoss")), []);
   assert.deepEqual(r.X, [0, 0, 0]);
 });
 
@@ -263,7 +263,8 @@ const herd = { classes: { cows: { head: 300 }, calvesBorn: { head: 285 }, calves
 
 test("F4: blank weight gain is listed; the value-of-gain warnings and help text (F4 1, 4, 5; row 13)", () => {
   const r = analyze({ settings: { T: 2, discountRate: 0.07 }, module: "eid", ...herd });
-  assert.deepEqual(texts(r, "notEntered"), ["Weight gain: not entered, not counted"]);
+  assert.deepEqual(texts(r, "notEntered"),
+    ["Net program premium: not entered, not counted", "Dosing savings: not entered, not counted", "Weight gain: not entered, not counted"]);
   const cwt = analyze({ settings: { T: 2, discountRate: 0.07 }, module: "eid", ...herd,
     classes: { ...herd.classes, calvesSold: { head: 240, valueOfGain: 79 } }, production: { lbPerHeadPerDay: 0.2, days: 100, classes: ["calvesSold"] } });
   assert.deepEqual(texts(cwt, "valueOfGainRange"),
@@ -277,7 +278,7 @@ test("F4: blank weight gain is listed; the value-of-gain warnings and help text 
 
 test("F7: blank risk lines are listed by label; row 12's warning in full", () => {
   const r = analyze({ settings: { T: 2, discountRate: 0.07 }, module: "water", classes: { cows: { head: 100, valuePerHead: 1500 } }, served: { cows: {} },
-    riskLines: [{ cause: "water", class: "cows", headPerEvent: 5, shareCaught: 1 }], water: { blocks: [] } });
+    riskLines: [{ cause: "water", class: "cows", headPerEvent: 5, shareCaught: 1 }], water: { blocks: [], variableCostPerMile: 0.4 } });
   assert.deepEqual(texts(r, "notEntered"), ["Losses avoided (water): not entered, not counted", "Losses from fewer physical checks: not entered, not counted"]);
   const mod = (module) => ({ settings: { T: 3, discountRate: 0.07 }, module, classes: { cows: { head: 100, valuePerHead: 1000 } }, served: { cows: {} },
     riskLines: [{ cause: "water", class: "cows", eventsPerYear: 0.15, headPerEvent: 5, shareCaught: 1 }] });
