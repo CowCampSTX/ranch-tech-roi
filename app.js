@@ -57,6 +57,7 @@ function buildInputs() {
     html += `<div class="row"><label for="f-${k}">${label}<small>${unit}</small></label>
       <input type="number" id="f-${k}" data-k="${k}" step="${step}" min="0" value="${p[k]}"></div>`;
     if (k === "years") html += `<p class="note" id="yearsNote"></p>`;
+    if (k === "discountRate") html += `<p class="note">Example assumption, not a recommendation. Review it for your operation.</p>`;
     html += `<p class="note error" id="err-${k}" role="alert"></p>`;
   }
   $("fields").innerHTML = html;
@@ -197,14 +198,14 @@ function twoWay(t) {
 function tiles(a) {
   const tile = (k, v, d) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
   $("tiles").innerHTML =
-    tile("Net present value", `<span class="${a.npv < 0 ? "neg" : ""}">${money(a.npv)}</span>`, `at ${p.discountRate}% over ${span(p.years)}`) +
-    tile("Payback", a.payback === null ? "None" : pbText(a.payback), a.payback === null ? (p.years === 1 ? "cash stays negative for the whole year" : `cash stays negative for all ${span(p.years)}`) : "until cumulative cash turns positive") +
-    tile("Internal rate of return", a.irr === null ? "n/a" : (a.irr * 100).toFixed(0) + "%", "the rate where NPV is zero") +
-    tile("Return on cost", a.roi === null ? "n/a" : (a.roi * 100).toFixed(0) + "%", "(benefits − costs) ÷ costs") +
-    tile("All-in cost", a.costPerHeadYear === null ? "n/a" : "$" + a.costPerHeadYear.toFixed(2), "per head per year");
+    tile("Net present value (before tax)", `<span class="${a.npv < 0 ? "neg" : ""}">${money(a.npv)}</span>`, `at ${p.discountRate}% over ${span(p.years)}`) +
+    tile("Payback (before tax)", a.payback === null ? "None" : pbText(a.payback), a.payback === null ? (p.years === 1 ? "cash stays negative for the whole year" : `cash stays negative for all ${span(p.years)}`) : "until cumulative cash turns positive") +
+    tile("Internal rate of return (before tax)", a.irr === null ? "n/a" : (a.irr * 100).toFixed(0) + "%", "the rate where NPV is zero") +
+    tile("Return on cost (before tax)", a.roi === null ? "n/a" : (a.roi * 100).toFixed(0) + "%", "(benefits − costs) ÷ costs") +
+    tile("All-in cost (before tax)", a.costPerHeadYear === null ? "n/a" : "$" + a.costPerHeadYear.toFixed(2), "per head per year");
   const good = a.npv >= 0;
   const top = tornado(p)[0];
-  $("verdict").innerHTML = `At these numbers, ${preset.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
+  $("verdict").innerHTML = `At these numbers, before tax, ${preset.replace(/^[A-Z](?=[a-z])/, (c) => c.toLowerCase())} <b class="${good ? "good" : "bad"}">${good ? "pays for itself" : "does not pay for itself"}</b>` +
     ` over ${span(p.years)}${good && a.payback !== null ? `, with payback in ${pbText(a.payback, "years")}` : ""}.` +
     (top ? ` The answer depends most on <b>${LABEL[top.key].label.toLowerCase()}</b>.` : "");
 }

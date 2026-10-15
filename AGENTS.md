@@ -67,6 +67,13 @@ These come from the owner's decisions in section 12 and apply to every change. E
   never a default.
 - The EID compliance baseline (B4b) is not built until research task R1 (8.4) is done.
 
+Until build step 6 moves the page to the new engine (9.1), today's page runs on the old model in `v1.js` and carries
+two of these rules: its results say they are before tax, and its discount rate is labeled as an example to review.
+The rest (vendor price fills, labels and "Quote required"; the rate review prompt; placeholder flags; land units and
+operator shares) are reviewed in `roi.js` and `text.js` in the step that builds them, and on the page at step 6,
+whose by-hand checklist covers every rule. A pull request before step 6 must not make today's page break a rule it
+already follows. (Owner decision, 15 Oct 2026.)
+
 ## Conventions
 
 - `roi.js` stays pure and importable in Node. DOM code stays in `app.js`. Code that tests must import, such as

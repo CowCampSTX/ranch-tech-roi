@@ -32,9 +32,10 @@ A scenario can be shared: **Copy link to this scenario** puts every input in the
 
 ## The model
 
-Year 0 is the purchase. Years 1 to N are operating years. N, "Years analyzed", is a whole number of years, 1 or more;
-any other value shows an error and nothing is calculated. Each starting point uses 5 years, the fallback when no
-contract term or asset life is known, and says so beside the input.
+All results are before income tax. Year 0 is the purchase. Years 1 to N are operating years. N, "Years analyzed", is
+a whole number of years, 1 or more; any other value shows an error and nothing is calculated. Each starting point
+uses 5 years, the fallback when no contract term or asset life is known, and says so beside the input. Its discount
+rate is an example, labeled on the page as an assumption to review, not a recommendation.
 
 | Line | Formula |
 |---|---|
@@ -114,11 +115,12 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 77 tests. v1.test.mjs (15): today's model, its hand-checked case, the horizon
-                                # rule and the wording of the sources. roi.test.mjs (53): the phase-1 engine's
-                                # cost lines, billing, labor, head counts, shared savings and validation,
-                                # the same hand-checked case, and Synthetic Ranch A's pinned cash NPV.
-                                # text.test.mjs (9): the notices and warnings the page will show
+node --test tests/*.test.mjs    # 78 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
+                                # rule, the wording of the sources, and the before-tax and example-rate labels.
+                                # roi.test.mjs (53): the phase-1 engine's cost lines, billing, labor, head
+                                # counts, shared savings and validation, the same hand-checked case, and
+                                # Synthetic Ranch A's pinned cash NPV. text.test.mjs (9): the notices and
+                                # warnings the page will show
 ```
 
 ## Files
