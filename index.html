@@ -59,6 +59,9 @@ th { color: var(--ink-2); font-weight: 600; }
 th { white-space: nowrap; }
 .neg { color: var(--bad); }
 .pos { color: var(--good); }
+.error { color: var(--bad); }
+.error:empty, .note:empty { display: none; }
+.results.invalid > .card:not(:first-child) { display: none; }
 a { color: var(--s1); }
 .sources td, .sources th { text-align: left; vertical-align: top; white-space: normal; }
 .formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--ink-2); }
@@ -87,7 +90,7 @@ a { color: var(--s1); }
   <p class="sub">Will a piece of ranch technology pay for itself on your operation? Pick a starting point, replace the numbers
     with your own quotes and records, and see the payback, the net present value and which assumptions the answer
     really depends on. Every calculation is shown below the charts.</p>
-  <p class="note">Starting values describe a 1,000-cow operation. Equipment and subscription costs come from published list prices (see Sources at the bottom); the benefits are assumptions to replace with your own records. Prices change, so confirm with the vendor before you decide.</p>
+  <p class="note">Synthetic example ranch. Made-up numbers for demonstration, not any real operation's data. Of the starting costs, only the water monitor's is a published price (a dealer's undated flyer). The virtual fence costs are vendor statements reported by the press and a figure from university comparison slides, not published list prices, and the EID costs have no published source (see Sources at the bottom). The benefits are assumptions to replace with your own records. Prices change, so get a quote before you decide.</p>
 </header>
 <main>
   <section class="card inputs" aria-label="Inputs">
@@ -96,16 +99,8 @@ a { color: var(--s1); }
     <div class="toolbar"><button id="reset" type="button">Reset to starting point</button><button id="copy" type="button">Copy link to this scenario</button></div>
     <div id="fields"></div>
   </section>
-  <section class="results">
+  <section class="results" id="results">
     <div class="card"><p class="verdict" id="verdict"></p><div class="tiles" id="tiles"></div></div>
-    <div class="card">
-      <h2>5-year outlook, 12 months at a time</h2>
-      <p class="note" id="fiveNote"></p>
-      <div class="tiles" id="fiveTiles"></div>
-      <div class="legend" style="margin-top:14px"><span><span class="sw" style="background:var(--good)"></span>Gain for the 12 months</span><span><span class="sw" style="background:var(--bad)"></span>Loss for the 12 months</span></div>
-      <div class="scroll"><div id="fiveChart" class="chart"></div></div>
-      <div class="scroll"><table id="fiveTable"></table></div>
-    </div>
     <div class="card">
       <h2>Cumulative cash position</h2>
       <p class="note">Purchase in year 0, then each year's benefit minus running costs. Payback is where the line crosses zero.</p>
@@ -135,12 +130,13 @@ a { color: var(--s1); }
     </div>
     <div class="card">
       <h2>Sources</h2>
-      <p class="note">Costs in the starting values are published list prices, as reported on the dates shown. They are listed for transparency and are not endorsements of any product. Benefit values (hours saved, weight gain, death loss avoided, other savings) are assumptions, not vendor claims.</p>
+      <p class="note">Each cost in the starting values is described below as what it is: a published dealer price, a vendor statement reported by the press, a figure from university comparison slides, or a placeholder with no published source. They are listed for transparency and are not endorsements of any product. Benefit values (hours saved, weight gain, death loss avoided, other savings) are assumptions, not vendor claims.</p>
       <table class="sources">
         <tr><th>Starting point</th><th>Value used</th><th>Source</th></tr>
-        <tr><td>Collar-based virtual fencing</td><td>$4,500 one-time infrastructure; subscription under $7 per head per month (modeled as $84/head/yr, collars included)</td><td><a href="https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best">DTN/Progressive Farmer, April 2025</a></td></tr>
-        <tr><td>Collar-based virtual fencing</td><td>$3,000 per base station (3 modeled for 1,000 head)</td><td><a href="https://rangelandsgateway.org/sites/default/files/users/user14/VFCompanyComparison.pdf">Virtual fence manufacturer comparison, Rangelands Gateway, April 2024</a></td></tr>
-        <tr><td>Remote water monitoring</td><td>$1,490 per satellite water-level monitor; $365 per monitor per year (10 monitors modeled)</td><td><a href="https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf">Water monitor dealer flyer (All-Tex Irrigation)</a></td></tr>
+        <tr><td>Collar-based virtual fencing</td><td>$4,500 one-time infrastructure; subscription under $7 per head per month (modeled as $84/head/yr, collars included). Vendor statements reported by the press, not published list prices.</td><td><a href="https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best">DTN/Progressive Farmer, 31 March 2025</a></td></tr>
+        <tr><td>Collar-based virtual fencing</td><td>$3,000 per base station (3 modeled for 1,000 head). A figure from university comparison slides, given when the slides said those collars were "not yet available" in the US, so not a published US price.</td><td><a href="https://rangelandsgateway.org/sites/default/files/users/user14/VFCompanyComparison.pdf">Virtual fence manufacturer comparison, Rangelands Gateway, 16 April 2024</a></td></tr>
+        <tr><td>Remote water monitoring</td><td>$1,490 per satellite water-level monitor; $365 per monitor per year (10 monitors modeled). A published dealer price.</td><td><a href="https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf">Water monitor dealer flyer (All-Tex Irrigation), undated; checked 15 October 2026</a></td></tr>
+        <tr><td>EID tags and scale</td><td>$4 per tag, $12,000 for the reader, scale and setup, $1 per head per year</td><td>No published source. Placeholders: replace them with your quotes.</td></tr>
         <tr><td>Fence comparison</td><td>Physical fence about $15,000 per mile to build, 2% a year to maintain</td><td><a href="https://pubs.nmsu.edu/_b/B133/index.html">New Mexico State University Extension, B-133</a></td></tr>
       </table>
     </div>

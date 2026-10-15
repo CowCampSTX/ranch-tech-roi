@@ -23,13 +23,17 @@ export const FIELDS = [
 ];
 
 /**
- * Starting points for a 1,000-cow operation. Costs come from published prices (sources on the page and in README.md);
- * benefits are assumptions to replace with your own records. Prices change: check with the vendor before deciding.
+ * Starting points. Synthetic example ranch. Made-up numbers for demonstration, not any real operation's data.
+ * Costs (sources on the page and in README.md): the water monitor's are a published dealer price (an undated flyer);
+ * the virtual fence's $4,500 infrastructure and subscription are vendor statements reported by the press, and its
+ * $3,000 base station a figure from university comparison slides, not published list prices; the EID costs have no
+ * published source. Benefits are assumptions to replace with your own records. Get a quote before deciding.
+ * No starting point has a contract term or asset life, so each uses the 5-year fallback horizon (HORIZON_NOTE).
  */
 export const PRESETS = {
   "Collar-based virtual fencing": {
     // $4,500 infrastructure + 3 base stations at $3,000; subscription "less than $7 per head per month", collars included.
-    head: 1000, years: 1, discountRate: 8,
+    head: 1000, years: 5, discountRate: 8,
     hardwarePerHead: 0, fixedCost: 13500,
     subscriptionPerHead: 84, maintenancePct: 0, replacementPct: 0,
     laborHoursPerWeek: 30, wage: 28, deathLossPts: 0.2, valuePerHead: 3000,
@@ -37,14 +41,15 @@ export const PRESETS = {
   },
   "Remote water monitoring": {
     // 10 satellite monitors at $1,490 each; $365 per monitor per year = $3.65 per head across 1,000 head.
-    head: 1000, years: 1, discountRate: 8,
+    head: 1000, years: 5, discountRate: 8,
     hardwarePerHead: 0, fixedCost: 14900,
     subscriptionPerHead: 3.65, maintenancePct: 0, replacementPct: 0,
     laborHoursPerWeek: 12, wage: 28, deathLossPts: 0.2, valuePerHead: 3000,
     gainLbsPerHead: 0, pricePerLb: 3.5, otherSavings: 4500, year1Realized: 90,
   },
   "EID tags and scale": {
-    head: 1000, years: 1, discountRate: 8,
+    // No published source for these costs: placeholders to replace with your quotes.
+    head: 1000, years: 5, discountRate: 8,
     hardwarePerHead: 4, fixedCost: 12000,
     subscriptionPerHead: 1, maintenancePct: 2, replacementPct: 100,
     laborHoursPerWeek: 3, wage: 28, deathLossPts: 0, valuePerHead: 3000,
@@ -53,6 +58,18 @@ export const PRESETS = {
 };
 
 const r2 = (x) => Math.round(x * 100) / 100;
+
+/** Shown beside "Years analyzed" while the horizon is the fallback: no contract term or asset life was entered. */
+export const HORIZON_NOTE = "5 years assumed: no contract term or asset life entered.";
+
+/** Input errors, as [{key, message}]; empty when the inputs can be analyzed. Nothing is computed while any remain. */
+export function validate(p) {
+  const errors = [];
+  if (!Number.isInteger(p.years) || p.years < 1) {
+    errors.push({ key: "years", message: "Enter a whole number of years, 1 or more." });
+  }
+  return errors;
+}
 
 /** Year-by-year cash flows. Year 0 is the purchase; years 1..N are operating years. */
 export function cashFlows(p) {
