@@ -64,7 +64,7 @@ changes over time. They can be folded into the inputs (for example, a lower hard
 [`docs/audit/phase1-spec.md`](docs/audit/phase1-spec.md) (sections 9.2 and 9.3). The page moves to it in the last
 step and runs on today's model, `v1.js`, until then. Money is in today's dollars, before tax, at a real discount rate,
 over years 0 to T. `examples.js` holds the four synthetic example ranches (A to D) with the source of each value, and
-`state.js` what each user action does to the state. Built so far:
+`state.js` what each user action does to the state, and `links.js` the shared links. Built so far:
 
 | Part | Rule |
 |---|---|
@@ -93,6 +93,8 @@ over years 0 to T. `examples.js` holds the four synthetic example ranches (A to 
 | Virtual fence | The pricing model picks the lines: leased collars carry a subscription on the enrolled classes; purchased collars are bought for the enrolled head, with a service fee per collar in use billed in advance. Other lines, such as infrastructure or base stations, are entered as quoted. Collar batteries = batteries per collar × collars, and collar loss = loss % × enrolled head × charge per collar, each billed in arrears. The moving and gathering hours cut are the claim on gathering hours; health-check riding hours cut add to the hours saved, but support paid hours cut only with a validated alert function. The fence the virtual fence replaces is the interior fence line above. |
 | EID tags and scale | Cow tags are bought per cow (they leave with the animal), calf tags per calf born each season, and retags = retag % × the cows' head each season, all at the tag price; the calf tags and retags are billed in arrears. Free tags: in each listed billing year, up to the free quantity costs $0, going to cow tags, then calf tags, then retags, with no carry-over. Net program premium (cash) = calves sold × (sale weight in cwt × premium per cwt − verification fee). Dosing savings (cash) = Σ over classes of head × applications a year × saving per application. Recording time today is hours saved. Whether the EID rule applies is recorded for the cows and other inventory classes; until the rule's status is verified, every tag stays a project cost and the page says so. |
 | Handling hours | Virtual fence and EID: Σ over the handling events of times a year × head of its classes × minutes per head × crew ÷ 60, plus gathers × riders × hours per gather, plus training days × riders × hours per day, in each operating year with cattle. Done by a paid hand they are a cost at pay rate × (1 + load); otherwise they lower the hours freed. |
+| Horizon from a link | A version 2 link whose settings give no T takes the longest contract term among its cost lines; else the life of the capital line with the largest year-0 cost; else 5 years, with the note "5 years assumed: no contract term or asset life entered." Every example and every version 1 link sets T. The horizon and the payback target are whole numbers of years from 1 to 50. |
+| Shared links | `links.js`. A link is `#v=2&m=<module>&x=<example>&s=<data>`, where the data is the URL-safe base64 of the UTF-8 JSON of what differs from the example: each changed part whole, a removed part as null, and each changed source record by its path. The payback target rides along only when it is not 5. Reading a link loads the example, applies the data, checks that every value has the shape the data model gives it (a number or blank, a list by year, one of a field's listed values, a list or set with only the data model's fields, a source record with its class, a discount rate, a timing and basis on each cost line, ids of letters, digits, `-` and `_`, and at most 51 entries in a list or set, a value for each year of the longest horizon), sets a negative number to 0 (and a ramp value above 1 to 1), names each such change in a banner, and checks the values as if typed; a link that cannot be read, or whose values give no finite result, opens Synthetic Ranch A and says so. A link from the version 1 page (no `v`) is converted: its values are mapped to the matching example's module (an unknown or missing technology opens the virtual fence and says so; the two brand names of the page just before 14 October 2026's last version, whose starting values were the same, are read as the technology they named), with the head as cows, the year-1 share as the ramp, labor hours as hours saved (capacity only), and its three costs as lines; the fields with no place in the new engine are named in the banner. |
 
 ## What the example shows
 
@@ -127,16 +129,17 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 212 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
+node --test tests/*.test.mjs    # 245 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
                                 # rule, the wording of the sources, and the before-tax and example-rate labels.
-                                # roi.test.mjs (93): the phase-1 engine's cost lines, billing, labor, head
+                                # roi.test.mjs (94): the phase-1 engine's cost lines, billing, labor, head
                                 # counts, shared savings, metrics, weight gain, losses avoided, land units,
                                 # operator shares, the fence, the ramp and validation, and the same
                                 # hand-checked case. modules.test.mjs (45): the water, virtual fence and EID
                                 # modules on the four example ranches, with their pinned results.
                                 # examples.test.mjs (12): the examples' sources, placeholders and vendor
-                                # prices. state.test.mjs (23): the user actions. text.test.mjs (23): the
-                                # notices, warnings, result texts, tiles and verdict the page will show
+                                # prices. state.test.mjs (24): the user actions. text.test.mjs (25): the
+                                # notices, warnings, result texts, tiles and verdict the page will show.
+                                # links.test.mjs (29): reading and writing links, and converting version 1 links
 ```
 
 ## Files
@@ -152,6 +155,8 @@ examples.js       the four synthetic example ranches (A to D) for the new engine
                   and the published vendor prices a user can fill in
 state.js          what each user action does to the state: load, reset, type or clear a value, keep the rate or
                   a placeholder, use a vendor price, remove an item
+links.js          shared links for the new engine: writing the state into the link, reading it back, and
+                  converting links made with the version 1 page
 tests/            node:test unit tests, including a small case checked by hand
 docs/             screenshots
 docs/audit/       the audit and improvement plan, and the phase-1 specification

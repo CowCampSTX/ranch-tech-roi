@@ -457,6 +457,18 @@ test("removeItem: a land unit's records go, and its entries in the shares split 
   for (const k of ["costs.subscription.operatorShare.u1", "benefitShares.laborCut"]) assert.deepEqual(b.prov[k], YOURS, k);
 });
 
+test("removeItem: a land unit's id is matched as text, so another unit's share records stay", () => {
+  const a = loadExample("ranchA");
+  a.settings.landUnits = [{ id: "u1", kind: "owned", share: 0.5 }, { id: "u?1", kind: "owned", share: 0.5 }];
+  a.costs.monitors.operatorShare = { u1: 0.8, "u?1": 1 };
+  Object.assign(a.prov, { "costs.monitors.operatorShare.u1": YOURS, "costs.monitors.operatorShare.u?1": YOURS });
+  const b = removeItem(a, "settings.landUnits", 1);
+  assert.deepEqual(b.costs.monitors.operatorShare, { u1: 0.8 });
+  assert.deepEqual([b.prov["costs.monitors.operatorShare.u1"], "costs.monitors.operatorShare.u?1" in b.prov], [YOURS, false]);
+  assert.doesNotThrow(() => removeItem({ ...a, settings: { ...a.settings, landUnits: [a.settings.landUnits[0], { id: "u(", share: 0.5 }] } },
+    "settings.landUnits", 1));
+});
+
 test("removeItem: removing the only land unit of a water or virtual fence analysis leaves a validation error (9.2)", () => {
   for (const id of ["ranchA", "ranchB"]) {
     const a = removeItem(loadExample(id), "settings.landUnits", 0);
