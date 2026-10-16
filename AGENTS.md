@@ -18,8 +18,8 @@ Ranch Tech ROI is a plain HTML and JavaScript calculator for ranch technology de
 - `links.js`: shared links: writing and reading the link, and `migrateV1()` (DOM-free), from build step 6
 - `tests/*.test.mjs`: tests, run in CI on Node 22 (`.github/workflows/test.yml`): `roi.test.mjs` for the engine,
   `modules.test.mjs` for the three modules on the example ranches, `examples.test.mjs` for the examples' provenance,
-  `state.test.mjs` for the user actions, `links.test.mjs` for the links, `text.test.mjs` for the page text,
-  `v1.test.mjs` for today's model
+  `state.test.mjs` for the user actions, `links.test.mjs` for the links, `pay.test.mjs` for the payback target and
+  "What would make it pay", `text.test.mjs` for the page text, `v1.test.mjs` for today's model
 
 There is no framework, build step or package manager. Keep it that way unless a change solves a demonstrated problem.
 

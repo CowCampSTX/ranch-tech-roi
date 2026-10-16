@@ -5,8 +5,8 @@
 // Built so far: cost lines with the capital scheduler, billing and commitments (F5), labor (F1), pools with the
 // single-module clamp and combine() (F9), head-months, head-based quantities and the cattle-presence rule (F3), and the
 // metrics with the IRR and payback states (F8), production and risk lines (F4, F7), land units, operator shares and
-// the fence (F6), the ramp (B3), and the three modules: water monitoring (B7), virtual fencing, and EID tags and scale
-// (B4a). Still to come: the N-year test and "What would make it pay" (B9).
+// the fence (F6), the ramp (B3), the three modules: water monitoring (B7), virtual fencing, and EID tags and scale
+// (B4a), and the N-year test and "What would make it pay" (B9).
 
 const blank = (v) => v === null || v === undefined || v === "";
 const num = (v) => (blank(v) ? 0 : v);
@@ -206,7 +206,9 @@ export function scheduleCapital(line, T, s, herd) {
       residual[T] += num(line.residual.pct) * last.amount;
     }
   }
-  if (mode === "amount") residual[T] += num(line.residual.dollars);
+  // An amount values the purchases made before T, so a line with none (as in an N-year test that ends before the line
+  // starts or its quantity first rises) has no residual (9.3).
+  if (mode === "amount" && cohorts.length) residual[T] += num(line.residual.dollars);
   purchases.sort((x, y) => x.year - y.year);
   return { cost, residual, purchases, lastCost, blankPrice };
 }
@@ -235,7 +237,8 @@ export function billAnnual(line, T, s, herd) {
     cost[year] += unitCost * billedQty;
     bills.push({ year, qty: billedQty, unitCost });
   }
-  const commitPastHorizon = commitYears > 0 && s + commitYears > T;
+  // A line that starts in year T or later has no flows, which only the N-year test allows (9.3, B9).
+  const commitPastHorizon = commitYears > 0 && s < T && s + commitYears > T;
   if (commitPastHorizon) cost[T] += num(line.earlyTerminationFee);
   return { cost, residual: zeros(T), bills, commitPastHorizon, blankPrice };
 }
@@ -649,23 +652,32 @@ export function operatorShare(a, line, u) {
 }
 
 /**
+ * The part of a staysWithLand capital line's leaseReimbursement that each leased unit receives at its lease end (9.3):
+ * leaseReimbursement × share ÷ Σ share over the units whose lease ends within the horizon (from landUnitsOf) and whose
+ * part had a purchase before its T'. A Map from the unit's number n to the amount.
+ */
+function reimbursements(line, units, s, herd) {
+  const bought = units.filter((u) => u.end !== null && scheduleCapital(line, u.end, s, herd).purchases.length);
+  const total = sum(bought.map((u) => u.share));
+  return new Map(bought.map((u) => [u.n, total > 0 ? num(line.leaseReimbursement) * u.share / total : 0]));
+}
+
+/**
  * A cost line's parts by land unit (9.3): each unit's share of the line as scheduled, except a capital line marked
  * staysWithLand on a unit whose lease ends at T'. That part runs through the scheduler with horizon T' (no purchase
- * in year T' or later, no repair after T') and, if it had a purchase before T', takes as its residual at T' its part
- * of leaseReimbursement: leaseReimbursement × share ÷ Σ share over the units whose lease ends within T and whose part
- * had a purchase.
+ * in year T' or later, no repair after T') and takes as its residual at T' its part of leaseReimbursement, as the
+ * full horizon allocates it (alloc: the full horizon's land units and herd). The N-year test keeps that allocation: a
+ * unit whose lease ends within the test but not within the full horizon (N > T) receives 0 (9.3, B9).
  */
-function costParts(line, units, full, s, herd, T) {
+function costParts(line, units, full, s, herd, T, alloc) {
   const part = (u) => ({ u, cost: full.cost.map((x) => x * u.share), residual: full.residual.map((x) => x * u.share) });
   if (line.timing !== "capital" || !line.staysWithLand || line.flow) return units.map(part);
-  const lease = new Map(units.filter((u) => u.end !== null).map((u) => [u, scheduleCapital(line, u.end, s, herd)]));
-  const bought = [...lease].filter(([, sch]) => sch.purchases.length).map(([u]) => u);
-  const total = sum(bought.map((u) => u.share));
+  const paid = reimbursements(line, alloc.units, s, alloc.herd);
   return units.map((u) => {
-    if (!lease.has(u)) return part(u);
+    if (u.end === null) return part(u);
     const cost = zeros(T), residual = zeros(T);
-    lease.get(u).cost.forEach((x, t) => (cost[t] = x * u.share));
-    if (bought.includes(u) && total > 0) residual[u.end] = num(line.leaseReimbursement) * u.share / total;
+    scheduleCapital(line, u.end, s, herd).cost.forEach((x, t) => (cost[t] = x * u.share));
+    residual[u.end] = paid.get(u.n) ?? 0;
     return { u, cost, residual };
   });
 }
@@ -844,7 +856,8 @@ function costPaths(a, id, c) {
  * the land-unit split, with a leased unit's part 0 after its lease ends (F6); the ramp (B3; not for a line marked
  * `ramp: false`); the cattle-presence rule (0 in a year t ≥ 1 with no head-months, for a line that requires cattle);
  * the pool's single-module clamp, or the combine() scale passed in opts.scales ({ [pool]: scale by year }), which
- * replaces it (9.6); × valuePerUnit; and the operator share (F6). Hours saved take the same factors up to the scale,
+ * replaces it (9.6); × valuePerUnit; and the operator share (F6). opts.fullT, in the N-year test, is the full horizon,
+ * whose allocation of lease-end reimbursements the test keeps (B9). Hours saved take the same factors up to the scale,
  * and paid hours cut and cash labor saved follow them through f_t (9.3 Labor). A cost line is split by land unit too, with its operator share.
  * Returns the operator's series by year (C cost, B cash benefit, R residual, X expected losses avoided, K capacity
  * value, P production, N = B + R − C), their present values, cash NPV, BCR, IRR and payback on N, the head-months
@@ -861,8 +874,12 @@ export function analyzeLines(a, lines, opts = {}) {
   const ctx = { a, T, s, HM: herd.HM, herd };
   const notices = [];
 
-  // Land units (F6, 9.3): each line's parts, w(t) its share of the line in year t after the lease-end rule.
+  // Land units (F6, 9.3): each line's parts, w(t) its share of the line in year t after the lease-end rule. The
+  // lease-end reimbursements are allocated over the full horizon's leases, opts.fullT in the N-year test (B9).
   const units = landUnitsOf(a);
+  const fullT = opts.fullT ?? T;
+  const alloc = fullT === T ? { units, herd }
+    : { units: landUnitsOf({ ...a, settings: { ...a.settings, T: fullT } }), herd: herdOf(a, fullT) };
   const fenceUnit = fenceUnitOf(a, units);
   const live = (u, t) => u.end === null || t <= u.end;
   const partsOf = new Map(lines.map((line) => [line, line.fence
@@ -989,7 +1006,7 @@ export function analyzeLines(a, lines, opts = {}) {
     } else if (line.kind === "cost") {
       const ls = startOf(line), full = schedules.get(line);
       const cost = zeros(T), residual = zeros(T), byUnit = [];
-      for (const part of costParts(line, units, full, ls, herd, T)) {
+      for (const part of costParts(line, units, full, ls, herd, T, alloc)) {
         const sh = shareOf(line, part.u);
         years.forEach((t) => { cost[t] += sh * part.cost[t]; residual[t] += sh * part.residual[t]; });
         byUnit.push({ unitId: part.u.id, series: part.cost.map((x) => sh * x), residual: part.residual.map((x) => sh * x) });
@@ -1170,6 +1187,435 @@ export function defaultHorizon(a) {
   return best ? { T: best.life, assumed: false } : { T: 5, assumed: true };
 }
 
+// ---------------------------------------------------------------- the N-year test and what would make it pay (B9)
+
+/** The payback target N (9.2): a whole number of years, 5 when the state has none. */
+export const paybackTargetOf = (a) => a.settings.paybackTarget ?? 5;
+
+const range = (from, to) => (to < from ? [] : [...Array(to - from + 1).keys()].map((i) => from + i));
+
+/** The value at a path ("water.blocks.0.shareAvoided"), or undefined. */
+function getPath(obj, path) {
+  return path.split(".").reduce((o, k) => (o === null || o === undefined ? undefined : o[k]), obj);
+}
+
+/**
+ * The analysis with the value at a path set to v (9.5 item 6), creating the objects (or, before an index, the lists)
+ * on the way. Pure: it copies only the objects on the path, and shares the rest, which the engine never changes. It
+ * sets an input and nothing else (no `prov`, no flags): what typing does to the state is state.js's setInput.
+ */
+export function setPath(a, path, v) {
+  const keys = path.split(".");
+  const put = (o, i) => {
+    const k = keys[i];
+    const base = o ?? (/^\d+$/.test(k) ? [] : {});
+    const copy = Array.isArray(base) ? [...base] : { ...base };
+    copy[k] = i === keys.length - 1 ? v : put(base[k], i + 1);
+    return copy;
+  };
+  return put(a, 0);
+}
+
+/**
+ * The analysis run again with horizon N in place of T and every other input unchanged (9.3, the N-year test). Every
+ * rule applies with N as the horizon: per-year inputs are read through year N, a shorter array carrying its last value
+ * (so a longer one is in effect cut to N + 1 entries; past T, each carries year T's value, whatever a list holds after
+ * it); purchases, repairs, upkeep and billing follow N, and a
+ * commitment that runs past N charges its fee in year N; a lease that ends within N follows the lease-end rule, with
+ * the reimbursement the full horizon allocates; straight-line residuals are valued at N, and pctOfCost and amount
+ * residuals are used as entered. null when the module starts in year N or later, so the test has no flows; a line
+ * that starts in year N or later has none in it (the rule startYear < T is not applied to the test). N is the payback
+ * target by default.
+ */
+export function nYearRun(a, N = paybackTargetOf(a)) {
+  if ((a.startYear ?? 0) >= N) return null;
+  const T = a.settings.T;
+  const b = { ...(N > T ? cutToHorizon(a, T) : a), settings: { ...a.settings, T: N } };
+  return analyzeLines(b, buildLines(b), { fullT: T });
+}
+
+// Lists of numbers that are not values by year (9.2): the ramp, by operating year, and the free tags' billing years.
+const NOT_PER_YEAR = new Set(["ramp", "eid.freeTags.years"]);
+
+/**
+ * The analysis with each per-year input cut to its T + 1 entries (years 0..T, 9.2), so that a test past T carries
+ * year T's value to year N, as 9.3 says, and never reads entries a list holds past the horizon (a link or a lowered T
+ * can leave them; the page shows years 0..T only).
+ */
+function cutToHorizon(x, T, path = "") {
+  if (Array.isArray(x)) {
+    if (x.every((v) => v === null || typeof v === "number")) return NOT_PER_YEAR.has(path) ? x : x.slice(0, T + 1);
+    return x.map((v, i) => cutToHorizon(v, T, `${path}.${i}`));
+  }
+  if (x === null || typeof x !== "object") return x;
+  return Object.fromEntries(Object.entries(x).map(([k, v]) => [k, k === "prov" && !path ? v : cutToHorizon(v, T, path ? `${path}.${k}` : k)]));
+}
+
+// Two warnings are the same when they come from the same notice about the same line, class, land unit, pool or water
+// block, whatever horizon or year their text names (9.3).
+const NOTICE_SUBJECTS = ["lineId", "class", "unit", "pool", "block"];
+const noticeKey = (n) => [n.type, ...NOTICE_SUBJECTS.map((k) => n[k] ?? "")].join("|");
+
+/**
+ * The N-year test (B9, 9.3), with N the payback target: { years: N, cashNPV, pays, warnings }. cashNPV is the operator's
+ * cash NPV before tax over years 0..N at the analysis's real rate; pays is true when it is 0 or more, false when it is
+ * below 0, and null when the test has no cash flows for the operator (C, B and R each below $0.005 in every year 0..N),
+ * as when the module starts in year N or later. warnings lists the notices the N-year run raises that the full-horizon
+ * run (full, analyze(a) by default) does not, each once. Assumes validate(a) found no errors.
+ */
+export function targetTest(a, full = analyze(a)) {
+  const N = paybackTargetOf(a);
+  const r = nYearRun(a, N);
+  const seen = new Set(full.notices.map(noticeKey));
+  const warnings = (r?.notices ?? []).filter((n) => {
+    const key = noticeKey(n);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { years: N, cashNPV: r ? r.cashNPV : 0, pays: !r || r.noCashFlows ? null : r.cashNPV >= 0, warnings };
+}
+
+/**
+ * A per-year input over the years it is used (9.3): entry y is the first above 0 in those years, else the first year's
+ * entry; varies is true when the entries differ across those years (an array whose entries are all equal is treated
+ * like a single number).
+ */
+function yearEntry(v, years) {
+  const y = years.find((t) => num(at(v, t)) > 0) ?? years[0];
+  const value = at(v, y);
+  return { y, value, varies: Array.isArray(v) && years.some((t) => num(at(v, t)) !== num(value)) };
+}
+
+/** A per-year input moved to v at entry y (9.3): every entry × v ÷ entry y, or every entry v when entry y is 0 or blank. */
+function scaleTo(x, v, entered) {
+  if (!Array.isArray(x)) return v;
+  if (!(num(entered) > 0)) return x.map(() => v);
+  return x.map((e) => (blank(e) ? e : e * v / entered));
+}
+
+/** A number or per-year array × f, blanks kept. */
+const times = (x, f) => (Array.isArray(x) ? x.map((e) => times(e, f)) : blank(x) ? x : x * f);
+
+const IN_PROPORTION = (label, y) => `${label} (year ${y}; other years in proportion)`;
+
+/**
+ * A driver that moves one input at a path (9.3): its entered value is entry y over the years the input is used, and
+ * its label ends " (year y; other years in proportion)" when it is a per-year array whose entries differ there.
+ * blank: the input is left blank (entered null).
+ */
+function pathDriver(a, d, years) {
+  const raw = getPath(a, d.path);
+  const e = yearEntry(raw, years);
+  const isBlank = blank(raw) || (Array.isArray(raw) && raw.every(blank));
+  return { ...d, label: e.varies ? IN_PROPORTION(d.label, e.y) : d.label, entered: isBlank ? null : num(e.value), blank: isBlank, na: d.na ?? null };
+}
+
+/** The years a module's cost line uses its unitCost (9.3): purchase years s..T−1 on a capital line, seasons s+1..T on an annual one. */
+function priceYears(a, id) {
+  const line = moduleCostLines(a).find((l) => l.id === id);
+  const s = blank(line?.startYear) ? a.startYear ?? 0 : line.startYear;
+  return line?.timing === "capital" ? range(s, a.settings.T - 1) : range(s + 1, a.settings.T);
+}
+
+/** A price driver (9.3): one cost line's unitCost. Its blank reads "Quote required" (9.5 item 9). */
+const priceDriver = (a, id, label, unit, hi) =>
+  ({ ...pathDriver(a, { id, path: `costs.${id}.unitCost`, label, unit, lo: 0, hi }, priceYears(a, id)), price: true });
+
+const LABOR_HI = { hour: 10000, day: 365, week: 52, position: 10 };
+const LABOR_UNITS = { hour: "hours", day: "days", week: "weeks", position: "positions" };
+
+/**
+ * Why a hired-labor driver is "n/a" (9.3), or null: freed time is absorbed, so no units are cut; or a field that 9.2
+ * requires for units cut above 0 is blank (hoursPerUnit, paidRate or salary, and loadPct, by labor unit), or
+ * hoursPerUnit is 0, so a cut has no cash value or no paid hours to check.
+ */
+function laborNa(a) {
+  const cut = a.labor.cut, u = cut.laborUnit;
+  if (!replacesPaidWork(a.labor)) return "absorbed";
+  const needs = [...(u === "hour" ? [] : ["hoursPerUnit"]), u === "position" ? "salary" : "paidRate", "loadPct"];
+  return needs.some((f) => blank(cut[f])) || !(hoursPerUnit(cut) > 0) ? "payNotEntered" : null;
+}
+
+/**
+ * Herd size (9.3), in every module: the head in year y of the first served or enrolled class, in the class order of
+ * 9.2, whose head is above 0 in some operating year (enrolled head for virtual fence, inventory head otherwise); y is
+ * the first operating year in which it is above 0. Its set multiplies every head count (each class's head, the heifers
+ * kept and the enrolled head, in every year), the free-tag quantities and the minQty of every line whose quantity comes
+ * from head by the value ÷ the entered value, so every quantity that depends on head scales in proportion. "n/a" (no
+ * head entered) with no such class.
+ */
+function herdDriver(a) {
+  const years = range((a.startYear ?? 0) + 1, a.settings.T), herd = herdOf(a, a.settings.T);
+  const order = Object.keys(CLASS_NAMES).filter((c) => herd.listed.includes(c));
+  const c = order.find((k) => years.some((t) => herd.head(k, t) > 0));
+  const d = { id: "herd", path: "herd", label: "Herd size", unit: CLASS_NAMES[c ?? order[0]] ?? "head", lo: 1, hi: 10000, blank: false };
+  if (c === undefined) return { ...d, entered: 0, na: "noHead" };
+  const y = years.find((t) => herd.head(c, t) > 0), entered = herd.head(c, y);
+  const varies = years.some((t) => herd.head(c, t) !== entered);
+  return { ...d, label: varies ? IN_PROPORTION(d.label, y) : d.label, entered, na: null, set: (b, v) => scaleHerd(b, v / entered) };
+}
+
+/** Every head count, free-tag quantity and head-based minQty × f (the herd-size driver, 9.3). */
+function scaleHerd(a, f) {
+  let next = a;
+  const scale = (path) => {
+    const x = getPath(next, path);
+    if (x !== undefined) next = setPath(next, path, times(x, f));
+  };
+  Object.keys(a.classes ?? {}).forEach((c) => scale(`classes.${c}.head`));
+  scale("heifersRetained");
+  Object.keys(a.enrolled ?? {}).forEach((c) => scale(`enrolled.${c}.head`));
+  if (a.eid?.freeTags) scale("eid.freeTags.qty");
+  for (const line of moduleCostLines(a)) {
+    const fromHead = ["perHeadMonth", "perHeadYear"].includes(line.basis) || (line.basis === "perDevice" && (line.classes ?? []).length > 0);
+    if (fromHead && a.costs?.[line.id] && !blank(a.costs[line.id].minQty)) scale(`costs.${line.id}.minQty`);
+  }
+  return next;
+}
+
+/** The water drivers (9.3 table): each season block's share, the vehicle cost per mile, hired labor, the two prices, herd size. */
+function waterDrivers(a) {
+  const w = a.water ?? {}, T = a.settings.T, s = a.startYear ?? 0, out = [];
+  (w.blocks ?? []).forEach((b, i) => {
+    if (!(num(b.runsPerWeek) > 0 && num(b.weeks) > 0)) return; // a block with no runs has nothing to act on
+    const d = pathDriver(a, { id: `share:${i}`, path: `water.blocks.${i}.shareAvoided`,
+      label: `Share of runs avoided in ${b.name ?? `block ${i + 1}`}`, unit: "%", lo: 0, hi: shareCap(b) }, [s + 1]);
+    // The share the analysis uses: as entered, at most the block's cap (9.3; 10.1 row 50(d)).
+    out.push(d.blank ? d : { ...d, entered: shareUsed(b) });
+  });
+  if (w.blocks?.length) {
+    out.push(pathDriver(a, { id: "vehicle", path: "water.variableCostPerMile", label: "Vehicle cost per mile", unit: "$/mi", lo: 0, hi: 5 }, [s + 1]));
+  }
+  if (a.labor?.cut) {
+    const u = a.labor.cut.laborUnit;
+    out.push(pathDriver(a, { id: "laborCut", path: "labor.cut.unitsCut", label: "Hired labor cut", unit: LABOR_UNITS[u] ?? "hours",
+      lo: 0, hi: LABOR_HI[u] ?? LABOR_HI.hour, na: laborNa(a) }, range(s + 1, T)));
+  }
+  if (a.costs?.monitors) out.push(priceDriver(a, "monitors", "Monitor price", "$ per monitor", 10000));
+  if (a.costs?.subscription) out.push(priceDriver(a, "subscription", "Subscription per monitor", "$ per monitor per year", 5000));
+  return [...out, herdDriver(a)];
+}
+
+/**
+ * The virtual fence drivers (9.3 table): the fence miles and cost per mile, the hired moving and gathering hours cut,
+ * the subscription or service fee by vf.pricing, and herd size.
+ */
+function vfDrivers(a) {
+  const v = a.vf ?? {}, T = a.settings.T, s = a.startYear ?? 0, out = [];
+  if (v.fence) {
+    // The fence miles move the plan with them (9.3): a plan below the entered miles keeps its ratio, so a clamp stays
+    // as entered; otherwise the plan is raised to cover the miles. A blank plan keeps defaulting to the miles.
+    const fenceMiles = (b, x) => {
+      const f = b.vf.fence, m0 = num(f.miles);
+      let plan = f.planMiles;
+      if (!blank(plan) && plan < m0) plan = plan * x / m0;
+      else if (!blank(plan) && plan < x) plan = x;
+      return setPath(setPath(b, "vf.fence.miles", x), "vf.fence.planMiles", plan);
+    };
+    out.push({ ...pathDriver(a, { id: "fenceMiles", path: "vf.fence.miles", label: "Interior fence that would otherwise be built",
+      unit: "mi", lo: 0, hi: 200 }, [s + 1]), set: fenceMiles });
+    out.push(pathDriver(a, { id: "fenceCost", path: "vf.fence.F", label: "Fence cost per mile", unit: "$/mi", lo: 0, hi: 50000 }, [s + 1]));
+  }
+  if (a.labor?.cut) out.push(hoursCutDriver(a, range(s + 1, T)));
+  if (v.pricing === "leased" && a.costs?.subscription) out.push(priceDriver(a, "subscription", "Subscription", "$/head/month", 20));
+  if (v.pricing === "purchased" && a.costs?.serviceFee) out.push(priceDriver(a, "serviceFee", "Service fee", "$ per collar per year", 1000));
+  return [...out, herdDriver(a)];
+}
+
+/**
+ * Hired moving and gathering hours cut (9.3): the paid hours cut a year, unitsCut × hoursPerUnit at entry y. Its set
+ * moves labor.cut.unitsCut to the value ÷ hoursPerUnit (a per-year array in proportion) and vf.gatherHoursCut by the
+ * change in entry y's hours, so the paid hours cut stay within the hours cut.
+ */
+function hoursCutDriver(a, years) {
+  const cut = a.labor.cut, e = yearEntry(cut.unitsCut, years), na = laborNa(a), per = hoursPerUnit(cut);
+  const d = pathDriver(a, { id: "hoursCut", path: "labor.cut.unitsCut", label: "Hired moving and gathering hours cut", unit: "h/yr",
+    lo: 0, hi: 10000, na }, years);
+  // Its value is the paid hours cut, units cut × hours per unit (9.3), on an n/a row too. With the hours per unit blank
+  // or 0 there are no hours to show, so that n/a row shows the units cut in their own unit, as the water driver does
+  // (judgment).
+  const entered = d.blank ? null : num(e.value) * (per > 0 ? per : 1);
+  if (na) return { ...d, entered, unit: per > 0 ? d.unit : LABOR_UNITS[cut.laborUnit] ?? "hours" };
+  const set = (b, x) => {
+    const cut = b.labor.cut, per = hoursPerUnit(cut), was = num(yearEntry(cut.unitsCut, years).value);
+    const g = b.vf?.gatherHoursCut, delta = x - was * per;
+    return setPath(setPath(b, "labor.cut.unitsCut", scaleTo(cut.unitsCut, x / per, was)), "vf.gatherHoursCut",
+      Array.isArray(g) ? g.map((h) => num(h) + delta) : num(g) + delta);
+  };
+  return { ...d, entered, set };
+}
+
+/** The EID drivers (9.3 table): herd size, the net program premium, the tag price, the reader and scale cost, added hours. */
+function eidDrivers(a) {
+  const T = a.settings.T, s = a.startYear ?? 0, years = range(s + 1, T), out = [herdDriver(a)];
+
+  // Net program premium: the net premium a year at the head in program (calves sold) in year y; a blank counts 0.
+  const head = (b, t) => num(at(b.classes?.calvesSold?.head, t));
+  const p = a.eid?.premium ?? {};
+  const premium = { id: "premium", path: "eid.premium", label: "Net program premium", unit: "$/yr", lo: 0, hi: 100000, blank: false };
+  const y = years.find((t) => head(a, t) > 0);
+  if (y === undefined) out.push({ ...premium, entered: 0, na: "noCalvesSold" });
+  else {
+    const varies = years.some((t) => head(a, t) !== head(a, y));
+    out.push({ ...premium, label: varies ? IN_PROPORTION(premium.label, y) : premium.label, na: null,
+      entered: head(a, y) * (num(p.saleCwt) * num(p.premiumPerCwt) - num(p.verificationFee)),
+      // Only the net amount enters cash, so the trial sets it as one premium per cwt on 1 cwt (judgment, 9.3).
+      set: (b, v) => setPath(b, "eid.premium", { saleCwt: 1, premiumPerCwt: v / head(b, y), verificationFee: 0 }) });
+  }
+
+  if (["cowTags", "calfTags", "retags"].some((id) => a.costs?.[id])) {
+    out.push({ ...pathDriver(a, { id: "tagPrice", path: "eid.tagPrice", label: "Tag price", unit: "$/tag", lo: 0, hi: 20 }, range(s, T)), price: true });
+  }
+
+  // Reader and scale cost: the sum of the reader, indicator and load bars, and platform prices, each moved in proportion.
+  const ids = ["reader", "indicatorBars", "platform"].filter((id) => a.costs?.[id]);
+  if (ids.length) {
+    const first = (id) => num(at(a.costs[id].unitCost, priceYears(a, id)[0]));
+    const total = sum(ids.map(first));
+    out.push({ id: "readerScale", path: "readerScale", label: "Reader and scale cost", unit: "$", lo: 0, hi: 50000, price: true,
+      entered: total, blank: ids.every((id) => blank(a.costs[id].unitCost)), na: total > 0 ? null : "noReaderCost",
+      set: (b, v) => ids.reduce((n, id) => setPath(n, `costs.${id}.unitCost`, times(n.costs[id].unitCost, v / total)), b) });
+  }
+
+  // Added hours: the handling hours and labor.added hours of year y; every handling time input and added item's hours
+  // move in proportion.
+  const herd = herdOf(a, T), handling = handlingHours(a, herd, s, T);
+  const added = (t) => handling[t] + sum((a.labor?.added ?? []).map((item) => addedHours(item.hours, t, s, T)));
+  const ya = years.find((t) => added(t) > 0);
+  const hours = { id: "addedHours", path: "addedHours", label: "Added hours", unit: "h/yr", lo: 0, hi: 2000, blank: false };
+  if (ya === undefined) out.push({ ...hours, entered: 0, na: "noAddedHours" });
+  else {
+    const entered = added(ya), varies = years.some((t) => added(t) !== entered);
+    const set = (b, v) => {
+      const f = v / entered;
+      let n = b;
+      const scale = (path) => {
+        const x = getPath(n, path);
+        if (x !== undefined) n = setPath(n, path, times(x, f));
+      };
+      (b.labor?.handling?.events ?? []).forEach((_, i) => scale(`labor.handling.events.${i}.minutesPerHead`));
+      if (b.labor?.handling) ["hoursPerGather", "hoursPerDay"].forEach((k) => scale(`labor.handling.${k}`));
+      (b.labor?.added ?? []).forEach((_, i) => scale(`labor.added.${i}.hours`));
+      return n;
+    };
+    out.push({ ...hours, label: varies ? IN_PROPORTION(hours.label, ya) : hours.label, entered, na: null, set });
+  }
+  return out;
+}
+
+/**
+ * The "What would make it pay" drivers of analysis a (B9, 9.2, 9.3 table), in the table's order: [{ id, path, label,
+ * unit, lo, hi, set, entered, blank, price, na }]. path is the input the driver moves, or the name of a driver that
+ * moves linked inputs through set ("herd", "readerScale", "addedHours"); label and unit as the panel shows them; lo and
+ * hi the search range in the stored unit (a fraction for a %); set(a, v), when present, the analysis with the driver at
+ * v. entered is the driver's value as entered (null when blank: blank true), price marks a price, whose blank reads
+ * "Quote required", and na names why the driver is "n/a" in both columns ("noHead", "noCalvesSold", "noReaderCost",
+ * "noAddedHours", "absorbed" or "payNotEntered"), or is null. A driver whose input has nothing to act on is left out
+ * (9.3); herd size, the net program premium and added hours are always returned. The version 1 lines have no driver.
+ */
+export function PAYBACK_DRIVERS(a) {
+  if (a.module === "water") return waterDrivers(a);
+  if (a.module === "vf") return vfDrivers(a);
+  if (a.module === "eid") return eidDrivers(a);
+  return [];
+}
+
+/**
+ * The analysis with driver d (from PAYBACK_DRIVERS) at value v (9.3): through its set, else at its path, a per-year
+ * array in proportion to entry y.
+ */
+export function moveDriver(a, d, v) {
+  if (d.set) return d.set(a, v);
+  return setPath(a, d.path, scaleTo(getPath(a, d.path), v, d.entered));
+}
+
+/** The 9.2 rule that a trial value breaks, of the two that bound a driver (9.3): "paidHours", "residual" or null. */
+function clipReason(a) {
+  if (paidHoursOver(a)) return "paidHours";
+  const T = a.settings.T, s = a.startYear ?? 0;
+  return moduleCostLines(a).some((l) => l.timing === "capital" && residualError(a, l, T, s)) ? "residual" : null;
+}
+
+const HALVINGS = 100;
+
+/**
+ * What would make it pay (B9, 9.3): for each driver of PAYBACK_DRIVERS(a), holding every other input as entered, the
+ * value at which the N-year test's cash NPV is 0 (target) and the value at which the full-horizon cash NPV is 0
+ * (horizon). The range [lo, hi], widened to include the entered value, is clipped to the values that pass the two 9.2
+ * rules that bound a driver (paid hours cut within the hours saved, a residual within the cost of its purchase), by
+ * bisection between the entered value and each end that breaks one. Then in each column: "none" when the cash NPV is
+ * below 0 at both ends of the clipped range, "all" when it is 0 or more at both, otherwise "value", found by bisection
+ * on the cash NPV, which returns the end that pays, with direction "at least" when the cash NPV is higher at the top of
+ * the range and "at most" otherwise. A column is "n/a" (reason "noCashFlows") when its test has no cash flows for the
+ * operator, and both are "n/a" with the driver's own reason (PAYBACK_DRIVERS). Assumes validate(a) found no errors.
+ * Returns one row per driver, in order: { id, path, label, unit, entered, blank, price, lo, hi, clippedLo, clippedHi,
+ * clipReasonLo, clipReasonHi, target, horizon }, with target and horizon each { state, value, direction, reason }.
+ */
+export function solveDrivers(a, full = analyze(a), test = targetTest(a, full)) {
+  const N = test.years;
+  const na = (reason) => ({ state: "n/a", value: null, direction: null, reason });
+  return PAYBACK_DRIVERS(a).map((d) => {
+    const lo = d.blank ? d.lo : Math.min(d.lo, d.entered), hi = d.blank ? d.hi : Math.max(d.hi, d.entered);
+    const row = { id: d.id, path: d.path, label: d.label, unit: d.unit, entered: d.entered, blank: d.blank, price: !!d.price,
+      lo, hi, clippedLo: null, clippedHi: null, clipReasonLo: null, clipReasonHi: null };
+    const target = test.pays === null ? na("noCashFlows") : d.na ? na(d.na) : null;
+    const horizon = full.noCashFlows ? na("noCashFlows") : d.na ? na(d.na) : null;
+    if (target && horizon) return { ...row, target, horizon };
+
+    const trial = (v) => moveDriver(a, d, v);
+    // The clip: the entered value passes (the analysis is valid), so each end that breaks a rule is moved toward it.
+    const anchor = Math.min(hi, Math.max(lo, d.blank ? 0 : d.entered));
+    const clip = (end) => {
+      if (clipReason(trial(end)) === null) return null;
+      let good = anchor, bad = end;
+      for (let i = 0; i < HALVINGS; i++) {
+        const m = (good + bad) / 2;
+        if (clipReason(trial(m)) === null) good = m; else bad = m;
+      }
+      return { value: good, reason: clipReason(trial(bad)) };
+    };
+    const cLo = clip(lo), cHi = clip(hi);
+    if (cLo) Object.assign(row, { clippedLo: cLo.value, clipReasonLo: cLo.reason });
+    if (cHi) Object.assign(row, { clippedHi: cHi.value, clipReasonHi: cHi.reason });
+    const from = row.clippedLo ?? lo, to = row.clippedHi ?? hi;
+
+    const solve = (npvAt) => {
+      const fLo = npvAt(from), fHi = npvAt(to);
+      if (fLo < 0 && fHi < 0) return { state: "none", value: null, direction: null, reason: null };
+      if (fLo >= 0 && fHi >= 0) return { state: "all", value: null, direction: null, reason: null };
+      let neg = fLo < 0 ? from : to, pos = fLo < 0 ? to : from;
+      for (let i = 0; i < HALVINGS; i++) {
+        const m = (neg + pos) / 2;
+        if (npvAt(m) >= 0) pos = m; else neg = m;
+      }
+      return { state: "value", value: pos, direction: fHi > fLo ? "at least" : "at most", reason: null };
+    };
+    return {
+      ...row,
+      target: target ?? solve((v) => nYearRun(trial(v), N).cashNPV),
+      horizon: horizon ?? solve((v) => analyze(trial(v)).cashNPV),
+    };
+  });
+}
+
+/**
+ * The drivers the verdict names (9.3 Ranking, 9.5 item 1), from solveDrivers() rows: those whose N-year result is a
+ * value, the smallest |value − entered| ÷ |entered| first; a driver entered as 0 or left blank after the others; ties
+ * in the order of the rows. A price left blank is never named.
+ */
+export function rankDrivers(rows) {
+  // The relative change is taken to 10 significant figures, so drivers that tie in exact arithmetic (fence miles and
+  // fence cost per mile; herd size and a per-head price that is the only head-based line) tie here too, whatever the
+  // round-off of their separate searches, and keep the table order (judgment: 9.3 names no tolerance).
+  const change = (r) => (r.blank || r.entered === 0 ? Infinity
+    : Number((Math.abs(r.target.value - r.entered) / Math.abs(r.entered)).toPrecision(10)));
+  return rows.map((r, i) => ({ r, i, k: r.target.state === "value" ? change(r) : null }))
+    .filter((x) => x.k !== null && !(x.r.blank && x.r.price))
+    .sort((x, y) => (x.k === y.k ? x.i - y.i : x.k < y.k ? -1 : 1))
+    .map((x) => x.r);
+}
+
 // ---------------------------------------------------------------- validation (9.2)
 
 export const YEARS_MESSAGE = "Enter a whole number of years, 1 or more.";
@@ -1218,20 +1664,9 @@ export function validate(a) {
       }
     }
     if (line.timing === "capital") {
-      const lifeOk = blank(line.lifeYears) || wholeYears(line.lifeYears);
-      if (!lifeOk) err(p + "lifeYears", "Life", YEARS_MESSAGE);
-      const res = line.residual;
-      if (res?.mode === "pctOfCost" && num(res.pct) > 1) {
-        err(p + "residual", "Residual", `Residual (${name}): cannot be more than 100% of the purchase cost.`);
-      }
-      if (res?.mode === "amount" && tOk && lifeOk) {
-        const ls = blank(line.startYear) ? s : line.startYear;
-        const { lastCost } = scheduleCapital(line, T, ls, herdOf(a, T));
-        if (num(res.dollars) > lastCost + 1e-9) {
-          err(p + "residual", "Residual",
-            `Residual (${name}): $${show(num(res.dollars))} is more than the $${show(lastCost)} that the purchases it values cost.`);
-        }
-      }
+      if (!(blank(line.lifeYears) || wholeYears(line.lifeYears))) err(p + "lifeYears", "Life", YEARS_MESSAGE);
+      const message = residualError(a, line, tOk ? T : null, s);
+      if (message) err(p + "residual", "Residual", message);
     } else if (!blank(line.commitYears) && !yearIndex(line.commitYears)) {
       err(p + "commitYears", "Commit years", `Commit years (${name}): enter a whole number of years.`);
     }
@@ -1258,6 +1693,43 @@ export function addedHoursInput(a, i) {
     return { label: items.length > 1 ? `Added data and desk time (${name})` : "Added data and desk time", unit: "h/yr", scale: 1 };
   }
   return { label: `Hours (${name})`, unit: "h/yr", scale: 1 };
+}
+
+/**
+ * The residual rule of 9.2 for a capital line (built by moduleCostLines): a residual within the cost of its purchase,
+ * so a pctOfCost of 100% or less, and an amount no more than what the purchases it values cost over the horizon T
+ * (not checked while T or the line's life is invalid, T null). The message, or null. The solver clips its range by it
+ * (B9).
+ */
+function residualError(a, line, T, s) {
+  const res = line.residual, name = lineLabel(a, line.id);
+  if (res?.mode === "pctOfCost" && num(res.pct) > 1) return `Residual (${name}): cannot be more than 100% of the purchase cost.`;
+  if (res?.mode !== "amount" || T === null || !(blank(line.lifeYears) || wholeYears(line.lifeYears))) return null;
+  const { lastCost } = scheduleCapital(line, T, blank(line.startYear) ? s : line.startYear, herdOf(a, T));
+  if (num(res.dollars) <= lastCost + 1e-9) return null;
+  return `Residual (${name}): $${show(num(res.dollars))} is more than the $${show(lastCost)} that the purchases it values cost.`;
+}
+
+/**
+ * The paid-hours rule of 9.2 (9.3 Labor): paid hours cut stay within the hours saved that can support them, taken
+ * before the ramp, the cattle-presence rule and the pool scale. Returns the first operating year that breaks it, as
+ * { t, paidCut, eligible }, or null. Not checked while "absorbed", when the cut counts as 0, nor while the cut has no
+ * paid hours to compare (hoursPerUnit blank or 0), nor while the horizon or start year is invalid. The solver clips its
+ * range by it (B9).
+ */
+function paidHoursOver(a) {
+  const L = a.labor, cut = L?.cut, T = a.settings?.T, s = a.startYear ?? 0;
+  const comparable = cut && (cut.laborUnit === "hour" || num(cut.hoursPerUnit) > 0);
+  if (!comparable || !replacesPaidWork(L) || !wholeYears(T) || !yearIndex(s) || s >= T) return null;
+  const herd = herdOf(a, T);
+  const ctx = { a, T, s, HM: herd.HM, herd };
+  const hourLines = buildLines(a).filter((l) => l.kind === "hours" && l.eligible !== false);
+  for (let t = s + 1; t <= T; t++) {
+    const paidCut = num(at(cut.unitsCut, t)) * hoursPerUnit(cut);
+    const eligible = hoursFrom(hourLines, t, ctx);
+    if (paidCut > eligible + 1e-9) return { t, paidCut, eligible };
+  }
+  return null;
 }
 
 /** A line's label, by its id (9.4): for validation messages and the notices that name an input of a line. */
@@ -1428,22 +1900,11 @@ function validateLabor(a, s, T, err) {
     }
   });
 
-  // Paid hours cut stay within the hours saved that can support them, taken before the ramp, the cattle-presence
-  // rule and the pool scale (9.3 Labor). Not checked while "absorbed", when the cut counts as 0, nor while the cut
-  // has no paid hours to compare (its hoursPerUnit error above).
-  const comparable = cut && (cut.laborUnit === "hour" || num(cut.hoursPerUnit) > 0);
-  if (paid && comparable && T !== null && yearIndex(s) && s < T) {
-    const herd = herdOf(a, T);
-    const ctx = { a, T, s, HM: herd.HM, herd };
-    const hourLines = buildLines(a).filter((l) => l.kind === "hours" && l.eligible !== false);
-    for (let t = s + 1; t <= T; t++) {
-      const paidCut = num(at(cut.unitsCut, t)) * hoursPerUnit(cut);
-      const eligible = hoursFrom(hourLines, t, ctx);
-      if (paidCut > eligible + 1e-9) {
-        err("labor.cut.unitsCut", unitsLabel,
-          `${unitsLabel}: the paid hours cut in year ${t} (${show(paidCut)} h) are more than the hours saved that can support them (${show(eligible)} h).`);
-        break;
-      }
-    }
+  // Paid hours cut stay within the hours saved that can support them (9.3 Labor; its hoursPerUnit error above when
+  // the cut has no paid hours to compare).
+  const over = T === null ? null : paidHoursOver(a);
+  if (over) {
+    err("labor.cut.unitsCut", unitsLabel,
+      `${unitsLabel}: the paid hours cut in year ${over.t} (${show(over.paidCut)} h) are more than the hours saved that can support them (${show(over.eligible)} h).`);
   }
 }
