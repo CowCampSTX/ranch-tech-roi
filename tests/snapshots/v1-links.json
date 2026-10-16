@@ -1,0 +1,764 @@
+[
+  {
+    "hash": "#preset=Collar-based+virtual+fencing",
+    "state": {
+      "module": "vf",
+      "example": "ranchB",
+      "settings": {
+        "T": 1,
+        "discountRate": 0.08,
+        "paybackTarget": 5,
+        "ownAnalysis": true,
+        "rateReviewed": false,
+        "opType": "cowCalf",
+        "oppCostPerHour": 28,
+        "landUnits": [
+          {
+            "id": "u1",
+            "kind": "owned",
+            "share": 1
+          }
+        ]
+      },
+      "classes": {
+        "cows": {
+          "head": 1000
+        }
+      },
+      "heifersRetained": 0,
+      "enrolled": {
+        "cows": {
+          "head": 1000,
+          "months": 12
+        }
+      },
+      "labor": {
+        "freedTimeUse": "absorbed",
+        "otherHoursSaved": 1560
+      },
+      "startYear": 0,
+      "ramp": [
+        1,
+        0.6,
+        1,
+        1
+      ],
+      "costs": {
+        "v1Fixed": {
+          "id": "v1Fixed",
+          "label": "Base station, setup and install",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "fixed",
+          "unitCost": 13500,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          }
+        },
+        "v1Subscription": {
+          "id": "v1Subscription",
+          "label": "Subscription per head",
+          "kind": "cost",
+          "timing": "annual",
+          "basis": "perHeadYear",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 7,
+          "billing": "advance"
+        }
+      },
+      "benefitShares": {},
+      "costShares": {},
+      "riskLines": [],
+      "prov": {
+        "classes.cows.head": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.T": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.discountRate": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.oppCostPerHour": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "labor.otherHoursSaved": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "ramp.1": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "enrolled.cows.head": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "costs.v1Fixed.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "costs.v1Subscription.unitCost": {
+          "cls": "C",
+          "src": "DTN",
+          "url": "https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best",
+          "pub": "31 Mar 2025",
+          "region": "US",
+          "reported": true,
+          "currency": "USD",
+          "note": "version 1 link"
+        },
+        "settings.landUnits.0.kind": {
+          "cls": "E",
+          "src": "Synthetic Ranch B: made-up example value"
+        },
+        "settings.landUnits.0.share": {
+          "cls": "E",
+          "src": "Synthetic Ranch B: made-up example value"
+        }
+      }
+    },
+    "banner": "This link was made with an earlier version of the calculator and has been converted. Not carried over: Death loss avoided; Value per head; Extra weight sold; Price; Fuel, vehicle and fence savings. The discount rate is now a real rate (net of expected inflation). Review it for your operation. The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head. Confirm the operation type (set to cow-calf) and the land units (taken from Synthetic Ranch B)."
+  },
+  {
+    "hash": "#preset=Remote+water+monitoring",
+    "state": {
+      "module": "water",
+      "example": "ranchA",
+      "settings": {
+        "T": 1,
+        "discountRate": 0.08,
+        "paybackTarget": 5,
+        "ownAnalysis": true,
+        "rateReviewed": false,
+        "opType": "cowCalf",
+        "oppCostPerHour": 28,
+        "landUnits": [
+          {
+            "id": "u1",
+            "kind": "owned",
+            "share": 1
+          }
+        ]
+      },
+      "classes": {
+        "cows": {
+          "head": 1000
+        }
+      },
+      "heifersRetained": 0,
+      "served": {
+        "cows": {
+          "months": 12
+        }
+      },
+      "labor": {
+        "freedTimeUse": "absorbed",
+        "otherHoursSaved": 624
+      },
+      "startYear": 0,
+      "ramp": [
+        1,
+        0.9,
+        1,
+        1
+      ],
+      "costs": {
+        "v1Fixed": {
+          "id": "v1Fixed",
+          "label": "Base station, setup and install",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "fixed",
+          "unitCost": 14900,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          }
+        },
+        "v1Subscription": {
+          "id": "v1Subscription",
+          "label": "Subscription per head",
+          "kind": "cost",
+          "timing": "annual",
+          "basis": "perHeadYear",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 0.30416666666666664,
+          "billing": "advance"
+        }
+      },
+      "benefitShares": {},
+      "costShares": {},
+      "riskLines": [],
+      "prov": {
+        "classes.cows.head": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.T": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.discountRate": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.oppCostPerHour": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "labor.otherHoursSaved": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "ramp.1": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "costs.v1Fixed.unitCost": {
+          "cls": "C",
+          "src": "All-Tex dealer flyer",
+          "url": "https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf",
+          "pub": "undated; checked 15 Oct 2026",
+          "region": "US",
+          "currency": "USD",
+          "note": "10 monitors × $1,490 (version 1 link)"
+        },
+        "costs.v1Subscription.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "settings.landUnits.0.kind": {
+          "cls": "E",
+          "src": "Synthetic Ranch A: made-up example value"
+        },
+        "settings.landUnits.0.share": {
+          "cls": "E",
+          "src": "Synthetic Ranch A: made-up example value"
+        }
+      }
+    },
+    "banner": "This link was made with an earlier version of the calculator and has been converted. Not carried over: Death loss avoided; Value per head; Price; Fuel, vehicle and fence savings. The discount rate is now a real rate (net of expected inflation). Review it for your operation. The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head. Confirm the operation type (set to cow-calf) and the land units (taken from Synthetic Ranch A)."
+  },
+  {
+    "hash": "#preset=EID+tags+and+scale",
+    "state": {
+      "module": "eid",
+      "example": "ranchC",
+      "settings": {
+        "T": 1,
+        "discountRate": 0.08,
+        "paybackTarget": 5,
+        "ownAnalysis": true,
+        "rateReviewed": false,
+        "opType": "cowCalf",
+        "oppCostPerHour": 28
+      },
+      "classes": {
+        "cows": {
+          "head": 1000
+        }
+      },
+      "heifersRetained": 0,
+      "served": {
+        "cows": {
+          "months": 12
+        }
+      },
+      "labor": {
+        "freedTimeUse": "absorbed",
+        "otherHoursSaved": 156
+      },
+      "startYear": 0,
+      "ramp": [
+        1,
+        0.5,
+        1,
+        1
+      ],
+      "costs": {
+        "v1Hardware": {
+          "id": "v1Hardware",
+          "label": "Hardware per head",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "perDevice",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 4,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          },
+          "repairPct": 0.02
+        },
+        "v1Fixed": {
+          "id": "v1Fixed",
+          "label": "Base station, setup and install",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "fixed",
+          "unitCost": 12000,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          }
+        },
+        "v1Subscription": {
+          "id": "v1Subscription",
+          "label": "Subscription per head",
+          "kind": "cost",
+          "timing": "annual",
+          "basis": "perHeadYear",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 0.08333333333333333,
+          "billing": "advance"
+        }
+      },
+      "benefitShares": {},
+      "costShares": {},
+      "riskLines": [],
+      "eid": {
+        "ruleApplies": {
+          "cows": false,
+          "calvesBorn": false
+        }
+      },
+      "prov": {
+        "classes.cows.head": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.T": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.discountRate": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.oppCostPerHour": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "labor.otherHoursSaved": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "ramp.1": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "costs.v1Hardware.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "costs.v1Hardware.repairPct": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "costs.v1Fixed.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "costs.v1Subscription.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        }
+      }
+    },
+    "banner": "This link was made with an earlier version of the calculator and has been converted. Not carried over: Devices lost or replaced; Value per head; Extra weight sold; Price; Fuel, vehicle and fence savings. The discount rate is now a real rate (net of expected inflation). Review it for your operation. The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head. Confirm the operation type (set to cow-calf)."
+  },
+  {
+    "hash": "#preset=Remote+water+monitoring&head=500&years=5",
+    "state": {
+      "module": "water",
+      "example": "ranchA",
+      "settings": {
+        "T": 5,
+        "discountRate": 0.08,
+        "paybackTarget": 5,
+        "ownAnalysis": true,
+        "rateReviewed": false,
+        "opType": "cowCalf",
+        "oppCostPerHour": 28,
+        "landUnits": [
+          {
+            "id": "u1",
+            "kind": "owned",
+            "share": 1
+          }
+        ]
+      },
+      "classes": {
+        "cows": {
+          "head": 500
+        }
+      },
+      "heifersRetained": 0,
+      "served": {
+        "cows": {
+          "months": 12
+        }
+      },
+      "labor": {
+        "freedTimeUse": "absorbed",
+        "otherHoursSaved": 624
+      },
+      "startYear": 0,
+      "ramp": [
+        1,
+        0.9,
+        1,
+        1
+      ],
+      "costs": {
+        "v1Fixed": {
+          "id": "v1Fixed",
+          "label": "Base station, setup and install",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "fixed",
+          "unitCost": 14900,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          }
+        },
+        "v1Subscription": {
+          "id": "v1Subscription",
+          "label": "Subscription per head",
+          "kind": "cost",
+          "timing": "annual",
+          "basis": "perHeadYear",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 0.30416666666666664,
+          "billing": "advance"
+        }
+      },
+      "benefitShares": {},
+      "costShares": {},
+      "riskLines": [],
+      "prov": {
+        "classes.cows.head": {
+          "cls": "D",
+          "src": "version 1 link"
+        },
+        "settings.T": {
+          "cls": "D",
+          "src": "version 1 link"
+        },
+        "settings.discountRate": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.oppCostPerHour": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "labor.otherHoursSaved": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "ramp.1": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "costs.v1Fixed.unitCost": {
+          "cls": "C",
+          "src": "All-Tex dealer flyer",
+          "url": "https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf",
+          "pub": "undated; checked 15 Oct 2026",
+          "region": "US",
+          "currency": "USD",
+          "note": "10 monitors × $1,490 (version 1 link)"
+        },
+        "costs.v1Subscription.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "settings.landUnits.0.kind": {
+          "cls": "E",
+          "src": "Synthetic Ranch A: made-up example value"
+        },
+        "settings.landUnits.0.share": {
+          "cls": "E",
+          "src": "Synthetic Ranch A: made-up example value"
+        }
+      }
+    },
+    "banner": "This link was made with an earlier version of the calculator and has been converted. Not carried over: Death loss avoided; Value per head; Price; Fuel, vehicle and fence savings. The discount rate is now a real rate (net of expected inflation). Review it for your operation. The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head. Confirm the operation type (set to cow-calf) and the land units (taken from Synthetic Ranch A)."
+  },
+  {
+    "hash": "#preset=Remote+water+monitoring&years=5",
+    "state": {
+      "module": "water",
+      "example": "ranchA",
+      "settings": {
+        "T": 5,
+        "discountRate": 0.08,
+        "paybackTarget": 5,
+        "ownAnalysis": true,
+        "rateReviewed": false,
+        "opType": "cowCalf",
+        "oppCostPerHour": 28,
+        "landUnits": [
+          {
+            "id": "u1",
+            "kind": "owned",
+            "share": 1
+          }
+        ]
+      },
+      "classes": {
+        "cows": {
+          "head": 1000
+        }
+      },
+      "heifersRetained": 0,
+      "served": {
+        "cows": {
+          "months": 12
+        }
+      },
+      "labor": {
+        "freedTimeUse": "absorbed",
+        "otherHoursSaved": 624
+      },
+      "startYear": 0,
+      "ramp": [
+        1,
+        0.9,
+        1,
+        1
+      ],
+      "costs": {
+        "v1Fixed": {
+          "id": "v1Fixed",
+          "label": "Base station, setup and install",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "fixed",
+          "unitCost": 14900,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          }
+        },
+        "v1Subscription": {
+          "id": "v1Subscription",
+          "label": "Subscription per head",
+          "kind": "cost",
+          "timing": "annual",
+          "basis": "perHeadYear",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 0.30416666666666664,
+          "billing": "advance"
+        }
+      },
+      "benefitShares": {},
+      "costShares": {},
+      "riskLines": [],
+      "prov": {
+        "classes.cows.head": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.T": {
+          "cls": "D",
+          "src": "version 1 link"
+        },
+        "settings.discountRate": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.oppCostPerHour": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "labor.otherHoursSaved": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "ramp.1": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "costs.v1Fixed.unitCost": {
+          "cls": "C",
+          "src": "All-Tex dealer flyer",
+          "url": "https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf",
+          "pub": "undated; checked 15 Oct 2026",
+          "region": "US",
+          "currency": "USD",
+          "note": "10 monitors × $1,490 (version 1 link)"
+        },
+        "costs.v1Subscription.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "settings.landUnits.0.kind": {
+          "cls": "E",
+          "src": "Synthetic Ranch A: made-up example value"
+        },
+        "settings.landUnits.0.share": {
+          "cls": "E",
+          "src": "Synthetic Ranch A: made-up example value"
+        }
+      }
+    },
+    "banner": "This link was made with an earlier version of the calculator and has been converted. Not carried over: Death loss avoided; Value per head; Price; Fuel, vehicle and fence savings. The discount rate is now a real rate (net of expected inflation). Review it for your operation. The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head. Confirm the operation type (set to cow-calf) and the land units (taken from Synthetic Ranch A)."
+  },
+  {
+    "hash": "#head=500",
+    "state": {
+      "module": "vf",
+      "example": "ranchB",
+      "settings": {
+        "T": 1,
+        "discountRate": 0.08,
+        "paybackTarget": 5,
+        "ownAnalysis": true,
+        "rateReviewed": false,
+        "opType": "cowCalf",
+        "oppCostPerHour": 28,
+        "landUnits": [
+          {
+            "id": "u1",
+            "kind": "owned",
+            "share": 1
+          }
+        ]
+      },
+      "classes": {
+        "cows": {
+          "head": 500
+        }
+      },
+      "heifersRetained": 0,
+      "enrolled": {
+        "cows": {
+          "head": 500,
+          "months": 12
+        }
+      },
+      "labor": {
+        "freedTimeUse": "absorbed",
+        "otherHoursSaved": 1560
+      },
+      "startYear": 0,
+      "ramp": [
+        1,
+        0.6,
+        1,
+        1
+      ],
+      "costs": {
+        "v1Fixed": {
+          "id": "v1Fixed",
+          "label": "Base station, setup and install",
+          "kind": "cost",
+          "timing": "capital",
+          "basis": "fixed",
+          "unitCost": 13500,
+          "lifeYears": null,
+          "residual": {
+            "mode": "none"
+          }
+        },
+        "v1Subscription": {
+          "id": "v1Subscription",
+          "label": "Subscription per head",
+          "kind": "cost",
+          "timing": "annual",
+          "basis": "perHeadYear",
+          "classes": [
+            "cows"
+          ],
+          "unitCost": 7,
+          "billing": "advance"
+        }
+      },
+      "benefitShares": {},
+      "costShares": {},
+      "riskLines": [],
+      "prov": {
+        "classes.cows.head": {
+          "cls": "D",
+          "src": "version 1 link"
+        },
+        "settings.T": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.discountRate": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "settings.oppCostPerHour": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "labor.otherHoursSaved": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "ramp.1": {
+          "cls": "E",
+          "src": "version 1 link"
+        },
+        "enrolled.cows.head": {
+          "cls": "D",
+          "src": "version 1 link"
+        },
+        "costs.v1Fixed.unitCost": {
+          "cls": "E",
+          "src": "version 1 link",
+          "placeholder": true
+        },
+        "costs.v1Subscription.unitCost": {
+          "cls": "C",
+          "src": "DTN",
+          "url": "https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best",
+          "pub": "31 Mar 2025",
+          "region": "US",
+          "reported": true,
+          "currency": "USD",
+          "note": "version 1 link"
+        },
+        "settings.landUnits.0.kind": {
+          "cls": "E",
+          "src": "Synthetic Ranch B: made-up example value"
+        },
+        "settings.landUnits.0.share": {
+          "cls": "E",
+          "src": "Synthetic Ranch B: made-up example value"
+        }
+      }
+    },
+    "banner": "This link was made with an earlier version of the calculator and has been converted. It named no known technology, so it opened as Collar-based virtual fencing. Not carried over: Death loss avoided; Value per head; Extra weight sold; Price; Fuel, vehicle and fence savings. The discount rate is now a real rate (net of expected inflation). Review it for your operation. The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head. Confirm the operation type (set to cow-calf) and the land units (taken from Synthetic Ranch B)."
+  }
+]

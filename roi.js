@@ -20,6 +20,9 @@ export function at(v, t) {
   return v.length ? v[Math.min(t, v.length - 1)] : undefined;
 }
 
+/** o[k] when k is o's own key, else undefined: an id from a link never reads an inherited member such as "toString". */
+export const own = (o, k) => (o !== null && typeof o === "object" && Object.hasOwn(o, k) ? o[k] : undefined);
+
 // ---------------------------------------------------------------- herd (F3)
 
 /** Class names as the page writes them (9.5 item 9). */
@@ -343,7 +346,7 @@ function moduleCostLines(a) {
     || (pricing === "purchased" && id === "subscription"));
   const cowClasses = costs.cowTags?.classes?.length ? costs.cowTags.classes : ["cows"];
   return Object.entries(costs).filter(([id]) => !skip(id)).map(([id, c]) => {
-    const line = { ...c, id, kind: "cost", label: LINE_LABELS[m]?.[id] ?? c.label ?? id, ...FIXED_TIMING[m]?.[id] };
+    const line = { ...c, id, kind: "cost", label: own(LINE_LABELS[m], id) ?? c.label ?? id, ...own(FIXED_TIMING[m], id) };
     let paths = null;
     if (m === "water" && ["monitors", "subscription", "batteries"].includes(id) && !blank(a.water?.monitors)) {
       Object.assign(line, { basis: "perDevice", qty: a.water.monitors });
@@ -638,7 +641,7 @@ const WATER_RUN_LINES = ["vehicle", "laborCut", "avoidedHire", "hoursFreed"];
  */
 export function operatorShare(a, line, u) {
   const stored = line.operatorShare ?? (line.kind === "cost" ? a.costShares?.[line.id] : a.benefitShares?.[line.id]);
-  const v = stored !== null && typeof stored === "object" ? stored[u.id] : stored;
+  const v = stored !== null && typeof stored === "object" ? (Object.hasOwn(stored, u.id) ? stored[u.id] : undefined) : stored;
   if (!blank(v)) return v;
   if (line.fence) return u.kind === "leased" && u.raw.fenceBuiltBy === "landlord" ? 0 : 1;
   if (a.module === "water" && WATER_RUN_LINES.includes(line.id) && waterCare(u)) return 0;
@@ -1141,17 +1144,47 @@ export function combine(analyses, build = buildLines) {
   return { results, pools, riskSubtotalPV: sum(results.map((r) => r.pv.X)), warnings };
 }
 
+// ---------------------------------------------------------------- horizon prefill (F2)
+
+/** The step-2 note when the horizon is the fallback of 5 years (F2, 9.2). */
+export const HORIZON_NOTE = "5 years assumed: no contract term or asset life entered.";
+
+/**
+ * The horizon for a state that has none (9.2 settings.T, F2): the largest commitYears above 0 among the module's cost
+ * lines; else the lifeYears of the capital line with the largest year-0 cost among those with a lifeYears, the first
+ * in costs order on a tie; else 5, assumed. Only cost lines count, so the fence block does not. A line that starts
+ * after year 0 has no year-0 cost. In phase 1 only a hand-made version 2 link whose settings have no T reaches it
+ * (10.1 row 51). Returns { T, assumed }.
+ */
+export function defaultHorizon(a) {
+  const lines = moduleCostLines(a);
+  const commits = lines.filter((l) => l.timing === "annual" && Number.isInteger(l.commitYears) && l.commitYears > 0);
+  if (commits.length) return { T: Math.max(...commits.map((l) => l.commitYears)), assumed: false };
+  const s = num(a.startYear);
+  let best = null;
+  for (const line of lines.filter((l) => l.timing === "capital" && Number.isInteger(l.lifeYears) && l.lifeYears >= 1)) {
+    const ls = blank(line.startYear) ? s : line.startYear;
+    const cost0 = ls === 0 ? scheduleCapital({ ...line, repairPct: 0 }, 1, 0, herdOf(a, 1)).cost[0] : 0;
+    if (!best || cost0 > best.cost0) best = { cost0, life: line.lifeYears };
+  }
+  return best ? { T: best.life, assumed: false } : { T: 5, assumed: true };
+}
+
 // ---------------------------------------------------------------- validation (9.2)
 
 export const YEARS_MESSAGE = "Enter a whole number of years, 1 or more.";
+// The longest horizon and payback target (judgment; spec issue: 9.2 gives no upper limit, and the engine builds a list
+// of T + 1 years, so a link or entry of a million years would stop the page).
+export const MAX_YEARS = 50;
+export const MAX_YEARS_MESSAGE = `Enter ${MAX_YEARS} years or fewer.`;
 const wholeYears = (v) => Number.isInteger(v) && v >= 1;
 const yearIndex = (v) => Number.isInteger(v) && v >= 0;
 const show = (x) => (Math.round(x * 100) / 100).toLocaleString("en-US");
 
 /**
- * The 9.2 validation errors built so far: the horizon, start years, the F5 cost-line fields, the F1 labor fields
- * (with the handling labor's pay and training days), the F3 class rules, and the F6 land-unit, operator-share and
- * fence rules.
+ * The 9.2 validation errors built so far: the horizon and the payback target, start years, the F5 cost-line fields,
+ * the F1 labor fields (with the handling labor's pay and training days), the F3 class rules, and the F6 land-unit,
+ * operator-share and fence rules.
  * Returns [{path, label, message}]: path is the input's path in the analysis, label its label on the page (9.4), and
  * message the text shown, which names the field unless it is the whole-years message. Nothing is computed while any
  * error remains. Later steps add their own rules (9.1). Trial values from the sensitivity features and the solver are
@@ -1161,8 +1194,13 @@ export function validate(a) {
   const errors = [];
   const err = (path, label, message) => errors.push({ path, label, message });
   const T = a.settings?.T;
-  const tOk = wholeYears(T);
-  if (!tOk) err("settings.T", "Horizon", YEARS_MESSAGE);
+  const tOk = wholeYears(T) && T <= MAX_YEARS;
+  if (!wholeYears(T)) err("settings.T", "Horizon", YEARS_MESSAGE);
+  else if (!tOk) err("settings.T", "Horizon", MAX_YEARS_MESSAGE);
+  // The payback target, N (B9): a whole number of years, 1 or more; a state without one uses 5 (9.2).
+  const N = a.settings?.paybackTarget;
+  if (N !== undefined && !wholeYears(N)) err("settings.paybackTarget", "Payback target", YEARS_MESSAGE);
+  else if (N !== undefined && N > MAX_YEARS) err("settings.paybackTarget", "Payback target", MAX_YEARS_MESSAGE);
 
   const s = a.startYear ?? 0;
   const startLabel = "The year the module starts";
@@ -1205,8 +1243,25 @@ export function validate(a) {
   return errors;
 }
 
-/** A line's label for a validation message, by its id (9.4). */
-function lineLabel(a, id) {
+/**
+ * The label of labor.added item i's hours on the page (9.4), the unit they are entered in and the factor from the
+ * stored value to it: water's install time (hours in the start year) and added monitoring time (entered in hours a
+ * week, stored × 52), EID's added data and desk time, and any other item by its own label. Validation and the link
+ * banner both name the input this way (9.5 item 11).
+ */
+export function addedHoursInput(a, i) {
+  const items = a.labor?.added ?? [];
+  const name = items[i]?.label ?? `added item ${i + 1}`;
+  if (a.module === "water" && name === "install") return { label: "Install time", unit: "h", scale: 1 };
+  if (a.module === "water" && name === "monitoring time") return { label: "Added monitoring time", unit: "h/wk", scale: 1 / 52 };
+  if (a.module === "eid") {
+    return { label: items.length > 1 ? `Added data and desk time (${name})` : "Added data and desk time", unit: "h/yr", scale: 1 };
+  }
+  return { label: `Hours (${name})`, unit: "h/yr", scale: 1 };
+}
+
+/** A line's label, by its id (9.4): for validation messages and the notices that name an input of a line. */
+export function lineLabel(a, id) {
   if (id.startsWith("added:")) return a.labor?.added?.[Number(id.slice(6))]?.label ?? id;
   if (id.startsWith("risk:")) {
     const r = a.riskLines?.[Number(id.slice(5))];
@@ -1215,7 +1270,7 @@ function lineLabel(a, id) {
   const labels = { laborCut: LABOR_CUT_LABEL[a.module] ?? "Hired labor cut", avoidedHire: "Avoided hire", production: "Weight gain",
     hoursFreed: "Hours freed", fewerChecks: "Losses from fewer physical checks", handling: "Handling labor",
     fence: a.vf?.fence?.mode === "deferred" ? "Interior fence deferred" : "Interior fence avoided" };
-  return labels[id] ?? LINE_LABELS[a.module]?.[id] ?? a.costs?.[id]?.label ?? id;
+  return own(labels, id) ?? own(LINE_LABELS[a.module], id) ?? own(a.costs, id)?.label ?? id;
 }
 
 /**
@@ -1368,7 +1423,8 @@ function validateLabor(a, s, T, err) {
     }
     if (Array.isArray(item.hours)) {
       const early = item.hours.findIndex((h, t) => t < s && num(h) > 0);
-      if (early >= 0) err(p + "hours", "Hours", `Hours (${name}): year ${early} is before the module starts in year ${s}, so it cannot have hours.`);
+      const { label } = addedHoursInput(a, i);
+      if (early >= 0) err(p + "hours", label, `${label}: year ${early} is before the module starts in year ${s}, so it cannot have hours.`);
     }
   });
 

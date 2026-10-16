@@ -215,7 +215,11 @@ export function removeItem(a, path, i) {
     Object.values(next.costs ?? {}).forEach((c) => drop(c.operatorShare));
     Object.values(next.costShares ?? {}).forEach(drop);
     Object.values(next.benefitShares ?? {}).forEach(drop);
-    for (const k of Object.keys(next.prov)) if (new RegExp(`(Shares\\.[^.]+|operatorShare)\\.${gone}$`).test(k)) delete next.prov[k];
+    // A share's record ends in the unit's id: "<costShares|benefitShares>.<line>.<id>" or "….operatorShare.<id>".
+    for (const k of Object.keys(next.prov)) {
+      const parts = k.split(".");
+      if (parts.at(-1) === gone && (parts.at(-2) === "operatorShare" || /Shares$/.test(parts.at(-3) ?? ""))) delete next.prov[k];
+    }
   }
   next.settings.ownAnalysis = true;
   return next;

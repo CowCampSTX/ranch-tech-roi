@@ -4,7 +4,9 @@
 // F4, F5, F6 and F7 and the pool warnings of F9 (9.5 items 4 and 11); the state texts, tiles and verdict of F8; and,
 // with the modules, the water-block warnings, the EID rule notice (B4a), the price labels (9.5 item 4) and the
 // examples' banners (9.5 item 5).
-import { CLASS_NAMES } from "./roi.js";
+import { addedHoursInput, CLASS_NAMES, LINE_LABELS, lineLabel as lineName, own } from "./roi.js";
+import { EXAMPLE_NAMES } from "./examples.js";
+import { V1_FIELDS } from "./v1.js";
 
 const MINUS = "−";
 
@@ -276,5 +278,227 @@ export function priceLabel(prov) {
   if (prov.cls !== "C") return null;
   const cite = `${prov.src}, ${prov.pub}`;
   if (prov.reported) return `Vendor information: reported price (${cite}), not a published list price. Not an endorsement. Replace with your quote.`;
-  return `Vendor information: published list price (${cite}). Not an endorsement. Replace with your quote.${prov.note ? ` (${prov.note})` : ""}`;
+  // A version 1 link's copy of a published price notes where it came from; the label shows only the price part, "(10
+  // monitors × $1,490)" (9.5 item 8, 10.1 row 30).
+  const note = prov.note?.replace(/ \(version 1 link\)$/, "");
+  return `Vendor information: published list price (${cite}). Not an endorsement. Replace with your quote.${note ? ` (${note})` : ""}`;
+}
+
+// ---------------------------------------------------------------- inputs: labels and units (9.4 intro, 9.5 items 9 and 11)
+
+/** The singular of a counted unit, for a value of 1 (9.5 items 1 and 9: "1 day", "1 cow"). */
+const SINGULAR = {
+  years: "year", days: "day", weeks: "week", hours: "hour", positions: "position", months: "month", monitors: "monitor",
+  cows: "cow", bulls: "bull", "replacement heifers": "replacement heifer", calves: "calf", "calves sold": "calf sold",
+  "cull cows sold": "cull cow sold", yearlings: "yearling", tags: "tag", people: "person", riders: "rider", times: "time",
+};
+
+/**
+ * A value with its unit as the notices write it (9.5 item 11, with the units of item 9): money as "$" and the amount
+ * followed by the rest of the unit ("$15,866/mi", "$1,490 per monitor"), a share stored as a fraction as a percent
+ * ("50%", "2%/yr"), and any other quantity to two decimals followed by its unit, singular for 1 ("−8 mi", "1 day").
+ */
+export function withUnit(x, unit) {
+  if (unit.startsWith("$")) return money(x) + unit.slice(1);
+  if (unit.startsWith("%")) return percent(x) + unit.slice(1);
+  const q = quantity(x);
+  if (!unit) return q;
+  return `${q} ${q.replace(MINUS, "") === "1" ? SINGULAR[unit] ?? unit : unit}`;
+}
+
+const LABOR_UNITS = { hour: "hours", day: "days", week: "weeks", position: "positions" };
+const UNITS_CUT_LABELS = { water: "Hired labor cut", vf: "Hired moving and gathering hours cut", eid: "Paid hours cut at the chute" };
+// The prices that a B9 driver moves take the driver's label (9.4 intro, 9.3 table).
+const PRICE_LABELS = {
+  water: { monitors: "Monitor price", subscription: "Subscription per monitor" },
+  vf: { subscription: "Subscription", serviceFee: "Service fee" },
+};
+// What one unit of a perDevice line counts, by module and line id.
+const DEVICES = {
+  water: { monitors: "monitor", subscription: "monitor", batteries: "monitor" },
+  vf: { collars: "collar", serviceFee: "collar", collarBatteries: "battery", baseStations: "base station", collarLoss: "collar" },
+  eid: { cowTags: "tag", calfTags: "tag", retags: "tag" },
+};
+const WORDS = {
+  weeks: ["Weeks", "weeks"], runsPerWeek: ["Runs per week", ""], milesPerRun: ["Miles per run", "mi"],
+  hoursPerRun: ["Hours per run", "h"], minVisitsPerWeek: ["Minimum visits per week", ""],
+};
+const HANDLING = {
+  gathers: ["Refit gathers", ""], gatherRiders: ["Riders per gather", "riders"], hoursPerGather: ["Hours per gather", "h"],
+  trainingDays: ["Training days", "days"], trainingRiders: ["Training riders", "riders"], hoursPerDay: ["Hours per day", "h"],
+  paidRate: ["Pay rate (Handling labor)", "$/h"], loadPct: ["Payroll load (Handling labor)", "%"],
+};
+const COST_FIELDS = {
+  lifeYears: ["Life", "years"], repairPct: ["Repairs", "%/yr"], minQty: ["Minimum quantity", ""],
+  commitYears: ["Commit years", "years"], earlyTerminationFee: ["Early-termination fee", "$"],
+  leaseReimbursement: ["Lease reimbursement", "$"], startYear: ["Start year", ""], qty: ["Quantity", ""],
+};
+const FIELD_SETS = {
+  vf: {
+    batteriesPerCollar: ["Batteries per collar per year", ""], gatherHoursToday: ["Moving and gathering hours today", "h/yr"],
+    gatherHoursCut: ["Moving and gathering hours cut", "h/yr"], healthCheckHoursCut: ["Health-check riding hours cut", "h/yr"],
+    "collarLoss.pctPerYear": ["Collar loss", "%/yr"], "collarLoss.chargePerCollar": ["Loss charge", "$/collar"],
+    "fence.miles": ["Interior fence that would otherwise be built", "mi"], "fence.planMiles": ["Interior fence miles in your plan", "mi"],
+    "fence.F": ["Fence cost per mile", "$/mi"], "fence.k": ["Fence build year", ""], "fence.Lf": ["Fence life", "years"],
+    "fence.m": ["Fence upkeep", "%/yr"], "fence.d": ["Years deferred", "years"],
+  },
+  eid: {
+    tagPrice: ["Tag price", "$/tag"], retagPct: ["Retag rate", "%/yr"], recordingHoursToday: ["Recording time today", "h/yr"],
+    "freeTags.qty": ["Free tags", "tags"], "freeTags.years": ["Free-tag billing years", ""],
+    "premium.saleCwt": ["Sale weight", "cwt"], "premium.premiumPerCwt": ["Premium", "$/cwt"],
+    "premium.verificationFee": ["Verification fee", "$/head"], "dosing.perApplication": ["Saving per application", "$/head/application"],
+  },
+  water: {
+    monitors: ["Monitors", "monitors"], variableCostPerMile: ["Vehicle cost per mile", "$/mi"],
+    "fewerChecksLoss.headPerYear": ["Losses from fewer physical checks", "head/yr"],
+  },
+};
+
+/** The unit of a cost line's unit cost (9.4): "$ per monitor", "$/head/month", "$/yr" or "$". */
+function priceUnit(a, id) {
+  const c = a.costs?.[id] ?? {};
+  if (a.module === "water" && id === "subscription") return "$ per monitor per year";
+  if (a.module === "vf" && id === "serviceFee") return "$ per collar per year";
+  const device = own(DEVICES[a.module], id);
+  if (device) return `$ per ${device}`;
+  if (c.basis === "perHeadMonth" || c.basis === "perHeadYear") return "$/head/month";
+  if (c.basis === "perDevice") return c.classes?.length ? "$/head" : "$ per device";
+  return c.timing === "annual" ? "$/yr" : "$";
+}
+
+/**
+ * The label and unit of the input at a path of analysis a (9.4 intro): the label the page gives it, which notices and
+ * validation errors use without its unit (9.5 item 11), and the unit that follows its value. An entry of a per-year
+ * list is named like the list. An input this table does not name takes its path, so a notice never breaks.
+ */
+export function inputInfo(a, path) {
+  const m = (re) => path.match(re);
+  let x;
+  const unitN = (i) => `land unit ${Number(i) + 1}`;
+  if (path === "settings.T") return { label: "Horizon", unit: "years" };
+  if (path === "settings.discountRate") return { label: "Discount rate", unit: "%/yr" };
+  if (path === "settings.paybackTarget") return { label: "Payback target", unit: "years" };
+  if (path === "settings.oppCostPerHour") return { label: "Owner time rate", unit: "$/h" };
+  if ((x = m(/^settings\.landUnits\.(\d+)\.(leaseYears|share|fenceReimbursement)$/))) {
+    const share = a.module === "water" ? "Share of water points" : a.module === "vf" ? "Share of head-months" : "Share";
+    const [label, unit] = { leaseYears: ["Lease term", "years"], share: [share, "%"], fenceReimbursement: ["Fence reimbursement at lease end", "$"] }[x[2]];
+    return { label: `${label} on ${unitN(x[1])}`, unit };
+  }
+  if ((x = m(/^classes\.(\w+)\.head(\.\d+)?$/))) return { label: "Head by class and year", unit: className(x[1]) };
+  if ((x = m(/^classes\.(\w+)\.valuePerHead$/))) return { label: `Value per head (${className(x[1])})`, unit: "$/head" };
+  if ((x = m(/^classes\.(\w+)\.valueOfGain$/))) return { label: `Value of gain (${className(x[1])})`, unit: "$/lb" };
+  if (m(/^heifersRetained(\.\d+)?$/)) return { label: "Calves kept as heifers", unit: "head" };
+  if ((x = m(/^enrolled\.(\w+)\.(head|months)(\.\d+)?$/))) {
+    return { label: "Enrolled head by class and months", unit: x[2] === "head" ? className(x[1]) : "months" };
+  }
+  if (m(/^served\.(\w+)\.months(\.\d+)?$/)) return { label: "Classes served and months on the served pastures", unit: "months" };
+  if (m(/^labor\.cut\.unitsCut(\.\d+)?$/)) {
+    return { label: UNITS_CUT_LABELS[a.module] ?? "Hired labor cut", unit: LABOR_UNITS[a.labor?.cut?.laborUnit] ?? "hours" };
+  }
+  if ((x = m(/^labor\.cut\.(hoursPerUnit|paidRate|salary|loadPct)$/))) {
+    return { label: { hoursPerUnit: "Hours per unit", paidRate: "Pay rate", salary: "Salary", loadPct: "Payroll load" }[x[1]],
+      unit: { hoursPerUnit: "h", paidRate: "$/h", salary: "$/yr", loadPct: "%" }[x[1]] };
+  }
+  if ((x = m(/^labor\.avoidedHire\.(salary|loadPct|startYear|years)$/))) {
+    const [label, unit] = { salary: ["Salary", "$/yr"], loadPct: ["Payroll load", "%"], startYear: ["First year", ""], years: ["Years", "years"] }[x[1]];
+    return { label: `${label} (Avoided hire)`, unit };
+  }
+  if ((x = m(/^labor\.added\.(\d+)\.(hours|paidRate|loadPct)(\.\d+)?$/))) {
+    if (x[2] === "hours") return addedHoursInput(a, Number(x[1]));
+    const name = a.labor?.added?.[Number(x[1])]?.label ?? `added item ${Number(x[1]) + 1}`;
+    const [label, unit] = { paidRate: ["Pay rate", "$/h"], loadPct: ["Payroll load", "%"] }[x[2]];
+    return { label: `${label} (${name})`, unit };
+  }
+  if (path === "labor.otherHoursSaved") return { label: "Other hours saved", unit: "h/yr" };
+  if ((x = m(/^labor\.handling\.events\.(\d+)\.(timesPerYear|minutesPerHead|crewSize)$/))) {
+    const name = a.labor?.handling?.events?.[Number(x[1])]?.label ?? `event ${Number(x[1]) + 1}`;
+    // EID enters seconds per read, stored as minutes per head (9.4).
+    if (x[2] === "minutesPerHead" && a.module === "eid") return { label: `Seconds per read (${name})`, unit: "s", scale: 60 };
+    const [label, unit] = { timesPerYear: ["Times per year", "times"], minutesPerHead: ["Minutes per head", "min"], crewSize: ["Crew size", "people"] }[x[2]];
+    return { label: `${label} (${name})`, unit };
+  }
+  if ((x = m(/^labor\.handling\.(\w+)(\.\d+)?$/)) && HANDLING[x[1]]) return { label: HANDLING[x[1]][0], unit: HANDLING[x[1]][1] };
+  if (path === "startYear") return { label: "The year the module starts", unit: "" };
+  if ((x = m(/^ramp\.(\d+)$/))) return { label: `Ramp in operating year ${x[1]}`, unit: "%" };
+  if ((x = m(/^costs\.([^.]+)\.unitCost(\.\d+)?$/))) {
+    return { label: own(PRICE_LABELS[a.module], x[1]) ?? lineName(a, x[1]), unit: priceUnit(a, x[1]) };
+  }
+  if ((x = m(/^costs\.([^.]+)\.residual\.(pct|dollars)$/))) {
+    return { label: `Residual (${lineName(a, x[1])})`, unit: x[2] === "pct" ? "%" : "$" };
+  }
+  if ((x = m(/^costs\.([^.]+)\.operatorShare(\.[^.]+)?$/))) return { label: `Who pays for this? (${lineName(a, x[1])})`, unit: "%" };
+  if ((x = m(/^costs\.([^.]+)\.(\w+)(\.\d+)?$/)) && COST_FIELDS[x[2]]) {
+    return { label: `${COST_FIELDS[x[2]][0]} (${lineName(a, x[1])})`, unit: COST_FIELDS[x[2]][1] };
+  }
+  if ((x = m(/^costShares\.([^.]+)(\.[^.]+)?$/))) return { label: `Who pays for this? (${lineName(a, x[1])})`, unit: "%" };
+  if ((x = m(/^benefitShares\.([^.]+)(\.[^.]+)?$/))) return { label: `Who receives this saving? (${lineName(a, x[1])})`, unit: "%" };
+  if ((x = m(/^riskLines\.(\d+)\.(eventsPerYear|headPerEvent|shareCaught)$/))) {
+    const [label, unit] = { eventsPerYear: ["Events per year", ""], headPerEvent: ["Head per event", "head"], shareCaught: ["Share caught early", "%"] }[x[2]];
+    return { label: `${label} (${lineName(a, `risk:${x[1]}`)})`, unit };
+  }
+  if ((x = m(/^production\.(lbPerHeadPerDay|days|soldShare)$/))) {
+    return { lbPerHeadPerDay: { label: "Gain", unit: "lb/head/day" }, days: { label: "Days", unit: "days" },
+      soldShare: { label: "Share of yearlings sold", unit: "%" } }[x[1]];
+  }
+  if ((x = m(/^water\.blocks\.(\d+)\.(\w+)$/))) {
+    const name = a.water?.blocks?.[Number(x[1])]?.name ?? `block ${Number(x[1]) + 1}`;
+    if (x[2] === "shareAvoided") return { label: `Share of runs avoided in ${name}`, unit: "%" };
+    if (WORDS[x[2]]) return { label: `${WORDS[x[2]][0]} (${name})`, unit: WORDS[x[2]][1] };
+  }
+  if ((x = m(/^eid\.dosing\.applications\.(\w+)$/))) return { label: `Applications per head per year (${className(x[1])})`, unit: "" };
+  if ((x = m(/^(water|vf|eid)\.(.+?)(\.\d+)?$/)) && FIELD_SETS[x[1]]?.[x[2]]) {
+    const [label, unit] = FIELD_SETS[x[1]][x[2]];
+    return { label, unit };
+  }
+  return { label: path, unit: "" };
+}
+
+// ---------------------------------------------------------------- link banners (9.5 items 8 and 11)
+
+export const UNREADABLE_LINK = "This link could not be read, so the page opened on Synthetic Ranch A.";
+
+/** A version 1 field's value with its version 1 unit (V1_FIELDS): "−$5,000", "8%", "500 head", "1 year". */
+function v1Value(field, x) {
+  const unit = V1_FIELDS.find(([, k]) => k === field)[3];
+  if (unit.startsWith("$")) return money(x) + unit.slice(1);
+  if (unit.startsWith("%")) return `${quantity(x)}${unit}`;
+  if (unit === "years") return count(x, "year");
+  return `${quantity(x)} ${unit}`;
+}
+const v1Label = (field) => V1_FIELDS.find(([, k]) => k === field)[2];
+
+/** "Changed from the link to a valid value: <input> (<from> to <to>); …." (9.5 item 11), or null with nothing changed. */
+function changedText(entries) {
+  return entries.length ? `Changed from the link to a valid value: ${entries.join("; ")}.` : null;
+}
+
+/**
+ * The banner of a page opened from a link (9.5 items 8 and 11), from readLink(): for an unreadable link, the sentence
+ * that says so; for a version 2 link, the values set to a valid one, if any; for a version 1 link, its conversion notes
+ * in the order of item 11. null when there is nothing to say (no link, or a version 2 link read as it was).
+ */
+export function linkBanner(result) {
+  if (result.kind === "unreadable") return UNREADABLE_LINK;
+  if (result.kind === "v2") {
+    return changedText(result.corrected.map((c) => {
+      const { label, unit, scale = 1 } = inputInfo(result.state, c.path);
+      return `${label} (${withUnit(c.from * scale, unit)} to ${withUnit(c.to * scale, unit)})`;
+    }));
+  }
+  if (result.kind !== "v1") return null;
+  const v1 = result.v1;
+  const parts = ["This link was made with an earlier version of the calculator and has been converted."];
+  if (v1.unknownPreset) parts.push(`It named no known technology, so it opened as ${moduleName("vf")}.`);
+  if (v1.notCarried.length) parts.push(`Not carried over: ${v1.notCarried.map(v1Label).join("; ")}.`);
+  const changed = changedText(v1.corrected.map((c) => `${v1Label(c.field)} (${v1Value(c.field, c.from)} to ${v1Value(c.field, c.to)})`));
+  if (changed) parts.push(changed);
+  parts.push("The discount rate is now a real rate (net of expected inflation). Review it for your operation.");
+  if (v1.subscription) {
+    parts.push("The subscription is now billed at the start of each year instead of at year end. Check whether your quote is per device rather than per head.");
+  }
+  // An example with no land units (EID's Ranch C) gives none to confirm (spec issue; judgment).
+  parts.push(result.state.settings.landUnits?.length
+    ? `Confirm the operation type (set to cow-calf) and the land units (taken from ${EXAMPLE_NAMES[v1.example]}).`
+    : "Confirm the operation type (set to cow-calf).");
+  return parts.join(" ");
 }

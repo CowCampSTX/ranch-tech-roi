@@ -7,7 +7,10 @@ import { analyze, analyzeLines, buildLines, combine, irr, payback, valueOfGainFr
 import {
   money, quantity, count, joinAnd, poolName, moduleName, className, noticeText,
   irrText, paybackText, roundingUnit, aboutMoney, verdictSentence, capacityLine, verdictNotes, tiles, PUBLISHED_PRICES, HELP,
+  withUnit, inputInfo,
 } from "../text.js";
+import { example, EXAMPLE_IDS, valuePaths } from "../examples.js";
+import { getAt } from "../state.js";
 
 const texts = (r, type) => r.notices.filter((n) => n.type === type).map(noticeText);
 const stockers = (months) => ({ module: "vf", classes: { yearlings: { head: 1200 } }, enrolled: { yearlings: { head: 1200, months } } });
@@ -297,4 +300,47 @@ test("F6: the lease-end and water-care notices (9.5 item 11; rows 35(b), 47(a) a
     ["On land unit 1, water care is included in the lease rate, so the vehicle, labor and hours-freed savings there go to the landowner by default and are listed under 'Received by others'."]);
   // A lease that ends exactly at T is not "inside" the horizon: no notice.
   assert.deepEqual(texts(water([{ id: "u1", kind: "leased", leaseYears: 10, share: 1 }]), "leaseEnds"), []);
+});
+
+test("an input's value with its unit, as the notices write it (9.5 items 9 and 11)", () => {
+  assert.equal(withUnit(-8, "mi"), "−8 mi");
+  assert.equal(withUnit(0, "mi"), "0 mi");
+  assert.equal(withUnit(15866, "$/mi"), "$15,866/mi");
+  assert.equal(withUnit(1490, "$ per monitor"), "$1,490 per monitor");
+  assert.equal(withUnit(6.67, "$/head/month"), "$6.67/head/month");
+  assert.equal(withUnit(-5000, "$"), "−$5,000");
+  assert.equal(withUnit(0.5, "%"), "50%");
+  assert.equal(withUnit(0.2424, "%"), "24.24%");
+  assert.equal(withUnit(0.02, "%/yr"), "2%/yr");
+  assert.equal(withUnit(1, "days"), "1 day");
+  assert.equal(withUnit(381, "cows"), "381 cows");
+  assert.equal(withUnit(1, "calves"), "1 calf");
+  assert.equal(withUnit(268, "h/yr"), "268 h/yr");
+  assert.equal(withUnit(3, ""), "3");
+});
+
+test("inputs take the labels of 9.4: a B9 driver's label where one moves the input, else its description", () => {
+  const label = (x, path) => inputInfo(example(x), path);
+  assert.deepEqual(label("ranchB", "vf.fence.miles"), { label: "Interior fence that would otherwise be built", unit: "mi" });
+  assert.deepEqual(label("ranchA", "labor.cut.unitsCut"), { label: "Hired labor cut", unit: "days" });
+  assert.deepEqual(label("ranchB", "labor.cut.unitsCut"), { label: "Hired moving and gathering hours cut", unit: "hours" });
+  assert.deepEqual(label("ranchA", "costs.monitors.unitCost"), { label: "Monitor price", unit: "$ per monitor" });
+  assert.deepEqual(label("ranchA", "costs.subscription.unitCost"), { label: "Subscription per monitor", unit: "$ per monitor per year" });
+  assert.deepEqual(label("ranchB", "costs.subscription.unitCost"), { label: "Subscription", unit: "$/head/month" });
+  assert.deepEqual(label("ranchA", "water.blocks.1.shareAvoided"), { label: "Share of runs avoided in fall–winter", unit: "%" });
+  assert.deepEqual(label("ranchA", "water.variableCostPerMile"), { label: "Vehicle cost per mile", unit: "$/mi" });
+  assert.deepEqual(label("ranchC", "eid.tagPrice"), { label: "Tag price", unit: "$/tag" });
+  assert.deepEqual(label("ranchD", "vf.fence.F"), { label: "Fence cost per mile", unit: "$/mi" });
+  assert.deepEqual(label("ranchA", "settings.paybackTarget"), { label: "Payback target", unit: "years" });
+  assert.deepEqual(label("ranchB", "labor.handling.paidRate"), { label: "Pay rate (Handling labor)", unit: "$/h" });
+  assert.deepEqual(label("ranchB", "classes.yearlings.head.3"), { label: "Head by class and year", unit: "yearlings" });
+  // Every number an example holds has a label, so a link's banner never names an input by its path.
+  for (const x of EXAMPLE_IDS) {
+    const a = example(x);
+    for (const path of valuePaths(a)) {
+      const v = getAt(a, path);
+      if (!(Array.isArray(v) ? v.some((n) => typeof n === "number") : typeof v === "number")) continue;
+      assert.notEqual(inputInfo(a, path).label, path, `${x}: ${path}`);
+    }
+  }
 });

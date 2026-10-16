@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  YEARS_MESSAGE, at, npv, analyze, analyzeLines, buildLines, scheduleCapital, billAnnual, billingOf, addedHours, validate,
+  YEARS_MESSAGE, MAX_YEARS_MESSAGE, at, npv, analyze, analyzeLines, buildLines, scheduleCapital, billAnnual, billingOf, addedHours, validate,
   herdOf, poolBaseline, combine, irr, payback, firstFlowYear, valueOfGainFromQuotes, landUnitsOf,
 } from "../roi.js";
 import { example } from "../examples.js";
@@ -410,6 +410,16 @@ test("a horizon that is not a whole number of years is an error, and nothing els
   assert.deepEqual(validate({ settings: { T: 1, discountRate: 0.07 } }), []);
 });
 
+test("a horizon or payback target above 50 years is an error, so no result builds a list of years that long (judgment)", () => {
+  assert.equal(MAX_YEARS_MESSAGE, "Enter 50 years or fewer.");
+  assert.deepEqual(validate({ settings: { T: 50, discountRate: 0.07, paybackTarget: 50 } }), []);
+  for (const T of [51, 1e9]) {
+    assert.deepEqual(validate({ settings: { T, discountRate: 0.07 } }), [{ path: "settings.T", label: "Horizon", message: MAX_YEARS_MESSAGE }]);
+  }
+  assert.deepEqual(validate({ settings: { T: 5, discountRate: 0.07, paybackTarget: 1e9 } }),
+    [{ path: "settings.paybackTarget", label: "Payback target", message: MAX_YEARS_MESSAGE }]);
+});
+
 test("cost-line rules: life, start years, commitment years and residuals (9.2)", () => {
   const a = (line, more = {}) => analysis(10, 0.07, { costs: { devices: line }, ...more });
   // An entered life must be a whole number of years, 1 or more; blank is one purchase.
@@ -466,8 +476,16 @@ test("labor rules: paid added hours need a pay rate and load, and no hours fall 
   assert.match(errors[0].message, /^Pay rate \(install\): /);
   assert.deepEqual(validate(a([{ label: "install", hours: [30, 0], doneBy: "unpaid" }])), []);
   const early = validate(a([{ label: "install", hours: [30, 0], doneBy: "unpaid" }], 2));
-  assert.deepEqual(early.map((e) => [e.path, e.label]), [["labor.added.0.hours", "Hours"]]);
+  assert.deepEqual(early.map((e) => [e.path, e.label]), [["labor.added.0.hours", "Hours (install)"]]);
   assert.deepEqual(validate(a([{ label: "install", hours: [0, 0, 30, 0], doneBy: "unpaid" }], 2)), []);
+  // Each item's hours are named as the page and the link banner name them (9.4): water's install time, EID's added
+  // data and desk time.
+  const water = validate({ ...example("ranchA"), startYear: 1 }).filter((e) => e.path === "labor.added.0.hours");
+  assert.deepEqual(water.map((e) => [e.label, e.message]),
+    [["Install time", "Install time: year 0 is before the module starts in year 1, so it cannot have hours."]]);
+  const c = example("ranchC");
+  const eid = validate({ ...c, startYear: 1, labor: { ...c.labor, added: [{ ...c.labor.added[0], hours: [15, 15] }] } });
+  assert.deepEqual(eid.filter((e) => e.path === "labor.added.0.hours").map((e) => e.label), ["Added data and desk time"]);
 });
 
 test("labor rules: an avoided hire needs whole years, a first year after the module starts, a salary and a load (9.2)", () => {
