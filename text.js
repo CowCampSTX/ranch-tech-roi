@@ -5,7 +5,7 @@
 // with the modules, the water-block warnings, the EID rule notice (B4a), the price labels (9.5 item 4) and the
 // examples' banners (9.5 item 5); the input labels and link banners (B8, 9.5 items 8 and 11); and the payback-target
 // line, the "It would pay" sentence and the "What would make it pay" panel (B9, 9.5 items 1 and 9).
-import { addedHoursInput, buildLines, CLASS_NAMES, LINE_LABELS, lineLabel as lineName, own, rankDrivers } from "./roi.js";
+import { addedHoursInput, buildLines, CLASS_NAMES, LINE_LABELS, lineLabel as lineName, own, priceUnit, rankDrivers } from "./roi.js";
 import { EXAMPLE_NAMES } from "./examples.js";
 import { V1_FIELDS } from "./v1.js";
 
@@ -194,11 +194,11 @@ export function exampleRate(a) {
 }
 
 /**
- * The verdict sentence (9.5 item 1), built so far from its first three parts: the amount over T years at the rate,
- * before tax; the state by the "pays" rule of 9.3; and, when cash NPV is below 0 and there are cash benefits, the
- * rise they would need. The sentence that names the drivers joins with the sensitivity port (9.1 step 6).
+ * The verdict sentence (9.5 item 1): the amount over T years at the rate, before tax; the state by the "pays" rule of
+ * 9.3; when cash NPV is below 0 and there are cash benefits, the rise they would need; and, given the tornado's bars
+ * (tornado(a, r).bars, widest first), "It turns most on" the entries with the two longest bars (none without bars).
  */
-export function verdictSentence(a, r) {
+export function verdictSentence(a, r, bars = []) {
   if (r.noCashFlows) return "No cash flows for you in this analysis.";
   const unit = roundingUnit(a, r);
   const pct = quantity(r.rate * 100);
@@ -213,6 +213,7 @@ export function verdictSentence(a, r) {
     parts.push(f >= 2 ? `Cash benefits would need to rise about ${f.toFixed(1)}-fold.`
       : `Cash benefits would need to rise by about ${Math.max(1, Math.round((f - 1) * 100))}%.`);
   }
+  if (bars.length) parts.push(`It turns most on ${bars.slice(0, 2).map((b) => lowerFirst(b.label)).join(" and ")}.`);
   return parts.join(" ");
 }
 
@@ -314,12 +315,6 @@ const PRICE_LABELS = {
   water: { monitors: "Monitor price", subscription: "Subscription per monitor" },
   vf: { subscription: "Subscription", serviceFee: "Service fee" },
 };
-// What one unit of a perDevice line counts, by module and line id.
-const DEVICES = {
-  water: { monitors: "monitor", subscription: "monitor", batteries: "monitor" },
-  vf: { collars: "collar", serviceFee: "collar", collarBatteries: "battery", baseStations: "base station", collarLoss: "collar" },
-  eid: { cowTags: "tag", calfTags: "tag", retags: "tag" },
-};
 const WORDS = {
   weeks: ["Weeks", "weeks"], runsPerWeek: ["Runs per week", ""], milesPerRun: ["Miles per run", "mi"],
   hoursPerRun: ["Hours per run", "h"], minVisitsPerWeek: ["Minimum visits per week", ""],
@@ -355,17 +350,6 @@ const FIELD_SETS = {
   },
 };
 
-/** The unit of a cost line's unit cost (9.4): "$ per monitor", "$/head/month", "$/yr" or "$". */
-function priceUnit(a, id) {
-  const c = a.costs?.[id] ?? {};
-  if (a.module === "water" && id === "subscription") return "$ per monitor per year";
-  if (a.module === "vf" && id === "serviceFee") return "$ per collar per year";
-  const device = own(DEVICES[a.module], id);
-  if (device) return `$ per ${device}`;
-  if (c.basis === "perHeadMonth" || c.basis === "perHeadYear") return "$/head/month";
-  if (c.basis === "perDevice") return c.classes?.length ? "$/head" : "$ per device";
-  return c.timing === "annual" ? "$/yr" : "$";
-}
 
 /**
  * The label and unit of the input at a path of analysis a (9.4 intro): the label the page gives it, which notices and
@@ -644,4 +628,44 @@ export function wouldPaySentence(test, rows) {
   if (!named.length) return `No single input in the panel makes it pay for itself ${within}.`;
   const phrase = (row) => `${lowerFirst(row.label)} ${solvedText(row, row.target)} ${row.blank ? "(left blank)" : `(you entered ${enteredText(row)})`}`;
   return `It would pay for itself ${within} if: ${named.map(phrase).join(", or ")}.`;
+}
+
+// ---------------------------------------------------------------- sensitivity (9.5 item 6)
+
+export const TORNADO_CAPTION = "Cash NPV, your share, before tax, with each input moved 20% down and 20% up, one at a time. "
+  + "The longest bars are the numbers worth checking first.";
+export const TORNADO_LEGEND = ["Lower value", "Higher value"];
+
+/** The tornado's caption (9.5 item 6), followed by a sentence for each entry tested over its zeroRange. */
+export function tornadoCaption(t) {
+  return [TORNADO_CAPTION, ...t.zeroTested.map((z) => `${z.label}, entered as 0, is tested from ${withUnit(z.lo, z.unit)} to ${withUnit(z.hi, z.unit)}.`)]
+    .join(" ");
+}
+
+/** A bar's hover text (9.5 item 6): its label, then the cash NPV at its lower and higher value. */
+export function tornadoHover(bar) {
+  return [`${bar.label} (now ${withUnit(bar.entered, bar.inputUnit)})`, `Lower value: cash NPV ${money(bar.low)}`,
+    `Higher value: cash NPV ${money(bar.high)}`];
+}
+
+/** The lists under the tornado (9.5 item 6), each when it has an entry, its labels joined with "; ". */
+export function tornadoLists(t) {
+  return [["Not counted, left blank", t.leftBlank], ["Entered as 0, not tested", t.zeroNotTested], ["No effect on cash NPV", t.noEffect]]
+    .filter(([, labels]) => labels.length).map(([lead, labels]) => `${lead}: ${labels.join("; ")}.`);
+}
+
+/** A value on an axis of the two-way grid, in the entry's own unit. */
+export const gridValue = (axis, v) => withUnit(v, axis.inputUnit);
+
+/** The note over the two-way grid (twoWayGrid), or null without one. */
+export function gridNote(g) {
+  if (!g) return null;
+  const range = (x) => (x.zeroRange ? `entered as 0, from ${gridValue(x, x.zeroRange[0])} to ${gridValue(x, x.zeroRange[1])}`
+    : "from 40% below to 40% above what you entered");
+  const parts = [`Cash NPV for the two inputs that matter most: ${lowerFirst(g.rows.label)} (rows), ${range(g.rows)}, and `
+    + `${lowerFirst(g.cols.label)} (columns), ${range(g.cols)}. The outlined cell is what you entered.`];
+  if (g.rows.capped || g.cols.capped) parts.push("A share of runs avoided stops at its block's cap, the most the analysis counts.");
+  if (g.rows.clipped || g.cols.clipped) parts.push("A value that is not valid with your other inputs is moved to the nearest one that is.");
+  if (g.cells.some((row) => row.includes(null))) parts.push("A cell marked n/a pairs values that are not valid together.");
+  return parts.join(" ");
 }
