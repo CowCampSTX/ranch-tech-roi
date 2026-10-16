@@ -95,6 +95,9 @@ over years 0 to T. `examples.js` holds the four synthetic example ranches (A to 
 | Handling hours | Virtual fence and EID: Σ over the handling events of times a year × head of its classes × minutes per head × crew ÷ 60, plus gathers × riders × hours per gather, plus training days × riders × hours per day, in each operating year with cattle. Done by a paid hand they are a cost at pay rate × (1 + load); otherwise they lower the hours freed. |
 | Horizon from a link | A version 2 link whose settings give no T takes the longest contract term among its cost lines; else the life of the capital line with the largest year-0 cost; else 5 years, with the note "5 years assumed: no contract term or asset life entered." Every example and every version 1 link sets T. The horizon and the payback target are whole numbers of years from 1 to 50. |
 | Shared links | `links.js`. A link is `#v=2&m=<module>&x=<example>&s=<data>`, where the data is the URL-safe base64 of the UTF-8 JSON of what differs from the example: each changed part whole, a removed part as null, and each changed source record by its path. The payback target rides along only when it is not 5. Reading a link loads the example, applies the data, checks that every value has the shape the data model gives it (a number or blank, a list by year, one of a field's listed values, a list or set with only the data model's fields, a source record with its class, a discount rate, a timing and basis on each cost line, ids of letters, digits, `-` and `_`, and at most 51 entries in a list or set, a value for each year of the longest horizon), sets a negative number to 0 (and a ramp value above 1 to 1), names each such change in a banner, and checks the values as if typed; a link that cannot be read, or whose values give no finite result, opens Synthetic Ranch A and says so. A link from the version 1 page (no `v`) is converted: its values are mapped to the matching example's module (an unknown or missing technology opens the virtual fence and says so; the two brand names of the page just before 14 October 2026's last version, whose starting values were the same, are read as the technology they named), with the head as cows, the year-1 share as the ramp, labor hours as hours saved (capacity only), and its three costs as lines; the fields with no place in the new engine are named in the banner. |
+| Payback target (N-year test) | N is the payback target (5 years unless changed). The analysis is run again with the horizon set to N: the residual at year N is recalculated for straight-line residuals, while a residual entered as a % of cost or an amount is used as entered (an amount only on a line bought within the N years); a lease-end reimbursement keeps the share the full horizon gives it (a lease that ends after T and within N gets none); a contract that runs past year N charges its early-termination fee in year N; past year T every price and quantity carries its value in year T (a value entered by year for a year after T is not used). It pays when its cash NPV is ≥ 0. With no cash flows for the operator within N years (or a module that starts in year N or later), it neither pays nor fails. Notices the N-year run raises that the full run does not are listed under the panel. |
+| What would make it pay | For each driver of the module (water: each block's share of runs avoided, vehicle cost per mile, hired labor cut, monitor price, subscription, herd size; virtual fence: interior fence miles, fence cost per mile, hired moving and gathering hours cut, subscription or service fee, herd size; EID: herd size, net program premium, tag price, reader and scale cost, added hours), the value at which the N-year test's cash NPV and the full horizon's cash NPV reach 0, one input changed at a time. Each driver has a range (its table range, widened to include the entered value), narrowed where other inputs make a value invalid (paid hours cut above the hours saved; a residual above the purchase's cost). The search is bisection, 100 halvings, between the range's ends; it gives "none" when no value in the range pays, "all" when every value does, the value with "at least" or "at most" otherwise, and n/a when the driver has nothing to act on (no head, no calves sold, no reader or scale cost, no added hours, freed time absorbed or pay not entered, or no cash flows within the test). A driver entered by year moves in proportion to its first operating year's value. Herd size scales every head count, the free tags and head-based minimums together. The verdict names up to two drivers with a value, the smallest relative change first, taken to 10 significant figures so that drivers which tie keep the table order (an entered 0 or blank last; a price left blank never). |
+| Display of a driver's value | Money is whole dollars at $100 or more and cents below; percentages and miles two decimals; head, days and hours whole. "At least" values round up and "at most" values round down, so each value shown, entered as is, passes its test; when that rounding would leave the narrowed range, the value is shown unrounded to two decimals. |
 
 ## What the example shows
 
@@ -129,7 +132,7 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 245 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
+node --test tests/*.test.mjs    # 286 tests. v1.test.mjs (16): today's model, its hand-checked case, the horizon
                                 # rule, the wording of the sources, and the before-tax and example-rate labels.
                                 # roi.test.mjs (94): the phase-1 engine's cost lines, billing, labor, head
                                 # counts, shared savings, metrics, weight gain, losses avoided, land units,
@@ -139,7 +142,9 @@ node --test tests/*.test.mjs    # 245 tests. v1.test.mjs (16): today's model, it
                                 # examples.test.mjs (12): the examples' sources, placeholders and vendor
                                 # prices. state.test.mjs (24): the user actions. text.test.mjs (25): the
                                 # notices, warnings, result texts, tiles and verdict the page will show.
-                                # links.test.mjs (29): reading and writing links, and converting version 1 links
+                                # links.test.mjs (29): reading and writing links, and converting version 1 links.
+                                # pay.test.mjs (41): the payback target, the N-year test of each example and
+                                # column, and "What would make it pay": drivers, values, ranking and texts
 ```
 
 ## Files
@@ -150,7 +155,7 @@ app.js            page wiring: inputs, charts, tables, written-out formulas
 v1.js             today's model, which the page runs on: pure functions, no dependencies, shared with the tests
 roi.js            the phase-1 engine, being built step by step (see "The new engine" above); the page does not use it yet
 text.js           the page text the new engine's results will show: formats, names, notices, warnings,
-                  result texts, tiles and the verdict
+                  result texts, tiles, the verdict, the payback target line and the "What would make it pay" panel
 examples.js       the four synthetic example ranches (A to D) for the new engine, with the source of each value
                   and the published vendor prices a user can fill in
 state.js          what each user action does to the state: load, reset, type or clear a value, keep the rate or

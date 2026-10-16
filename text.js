@@ -3,8 +3,9 @@
 // the page shows it from step 6. Built so far: the formats and names of 9.5 items 9 and 11; the notices of F1, F3,
 // F4, F5, F6 and F7 and the pool warnings of F9 (9.5 items 4 and 11); the state texts, tiles and verdict of F8; and,
 // with the modules, the water-block warnings, the EID rule notice (B4a), the price labels (9.5 item 4) and the
-// examples' banners (9.5 item 5).
-import { addedHoursInput, CLASS_NAMES, LINE_LABELS, lineLabel as lineName, own } from "./roi.js";
+// examples' banners (9.5 item 5); the input labels and link banners (B8, 9.5 items 8 and 11); and the payback-target
+// line, the "It would pay" sentence and the "What would make it pay" panel (B9, 9.5 items 1 and 9).
+import { addedHoursInput, buildLines, CLASS_NAMES, LINE_LABELS, lineLabel as lineName, own, rankDrivers } from "./roi.js";
 import { EXAMPLE_NAMES } from "./examples.js";
 import { V1_FIELDS } from "./v1.js";
 
@@ -501,4 +502,146 @@ export function linkBanner(result) {
     ? `Confirm the operation type (set to cow-calf) and the land units (taken from ${EXAMPLE_NAMES[v1.example]}).`
     : "Confirm the operation type (set to cow-calf).");
   return parts.join(" ");
+}
+
+// ---------------------------------------------------------------- payback target and what would make it pay (B9)
+
+/** The line under the verdict sentence (9.5 item 1, 9.3), from targetTest(). */
+export function paybackTargetLine(test) {
+  const within = `within ${count(test.years, "year")}`;
+  if (test.pays === null) return `No cash flows for you ${within}`;
+  return test.pays ? `Pays for itself ${within} (counting equipment value left at year ${test.years})` : `Does not pay for itself ${within}`;
+}
+
+const lowerFirst = (label) => label.charAt(0).toLowerCase() + label.slice(1);
+
+/**
+ * The precision a driver's value is shown at (9.5 item 9), as a step in its stored unit: money in whole dollars at
+ * $100 or more and in cents below; two decimals for miles and percentages (a fraction, so 0.0001); whole numbers for
+ * head, days, weeks, positions and hours.
+ */
+function precision(x, unit) {
+  if (unit.startsWith("$")) return Math.abs(x) >= 100 ? 1 : 0.01;
+  if (unit === "%") return 0.0001;
+  return unit === "mi" ? 0.01 : 1;
+}
+
+/** x rounded to its precision: "up", "down" or to the nearest (9.5 item 9). The 1e-9 keeps a float at a step from moving a step. */
+function rounded(x, unit, mode) {
+  const step = precision(x, unit), q = x / step;
+  const n = mode === "up" ? Math.ceil(q - 1e-9) : mode === "down" ? Math.floor(q + 1e-9) : Math.round(q);
+  return n * step;
+}
+
+/** A value unrounded, to two decimals, with its unit (9.5 item 9: a rounding that would leave the clipped range). */
+function twoDecimals(x, unit) {
+  const fixed = (v) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (unit.startsWith("$")) return `$${fixed(x)}${unit.slice(1)}`;
+  if (unit === "%") return `${fixed(x * 100)}%`;
+  return `${fixed(x)} ${unit}`;
+}
+
+/** An entered value, or the end of a range, rounded to the nearest at its precision, with its unit (9.5 item 9). */
+const nearest = (x, unit) => withUnit(rounded(x, unit, "nearest"), unit);
+
+/** The low end of a range in a "none" or "all" cell, which keeps only its "$" or "%" sign (9.5 item 9). */
+function lowEnd(x, unit) {
+  const v = rounded(x, unit, "nearest");
+  return unit.startsWith("$") ? money(v) : unit === "%" ? percent(v) : quantity(v);
+}
+
+/**
+ * A solved value as the panel and the verdict show it (9.5 item 9): "at least" rounded up and "at most" rounded down
+ * to its precision, so that the value shown, entered as is, passes its test; unrounded, to two decimals, when that
+ * rounding would take it outside the clipped range.
+ */
+function solvedText(row, c) {
+  const v = rounded(c.value, row.unit, c.direction === "at least" ? "up" : "down");
+  const from = row.clippedLo ?? row.lo, to = row.clippedHi ?? row.hi;
+  const inside = v >= from - 1e-9 && v <= to + 1e-9;
+  return `${c.direction} ${inside ? withUnit(v, row.unit) : twoDecimals(c.value, row.unit)}`;
+}
+
+/** "You entered" (9.5 item 9): the entered value; "Quote required" for a blank price, "Left blank" for another blank driver. */
+function enteredText(row) {
+  if (row.blank) return row.price ? "Quote required" : "Left blank";
+  return nearest(row.entered, row.unit);
+}
+
+const NA_TEXT = {
+  noHead: "n/a: no head entered", noReaderCost: "n/a: no reader or scale cost entered", noAddedHours: "n/a: no added hours entered",
+  noCalvesSold: "n/a: no calves sold", absorbed: "n/a: freed time is absorbed", payNotEntered: "n/a: pay rate, hours per unit or load not entered",
+};
+const CLIP_REASONS = {
+  paidHours: "paid hours cut cannot be more than the hours saved",
+  residual: "a residual cannot be more than the cost of the purchase",
+};
+
+/** A panel cell (9.5 item 9): column "target" (the N-year test) or "horizon" (the full horizon), by the result's state. */
+function cellText(row, column, N, T) {
+  const c = row[column], label = lowerFirst(row.label);
+  const years = count(column === "target" ? N : T, "year");
+  const between = `between ${lowEnd(row.clippedLo ?? row.lo, row.unit)} and ${nearest(row.clippedHi ?? row.hi, row.unit)}`;
+  switch (c.state) {
+    case "value": return solvedText(row, c);
+    case "none": return column === "target" ? `No ${label} ${between} makes it pay for itself within ${years}`
+      : `No ${label} ${between} makes it break even over ${years}`;
+    case "all": return column === "target" ? `Pays for itself within ${years} at any ${label} ${between}`
+      : `Breaks even or better over ${years} at any ${label} ${between}`;
+    default: return c.reason === "noCashFlows" ? `n/a: no cash flows within ${years}` : NA_TEXT[c.reason];
+  }
+}
+
+/** The notes on a row whose range the 9.2 validation clipped (9.5 item 9). */
+function clipNotes(row) {
+  const notes = [];
+  if (row.clipReasonLo) notes.push(`Values below ${nearest(row.clippedLo, row.unit)} are not valid with your other inputs: ${CLIP_REASONS[row.clipReasonLo]}.`);
+  if (row.clipReasonHi) notes.push(`Values above ${nearest(row.clippedHi, row.unit)} are not valid with your other inputs: ${CLIP_REASONS[row.clipReasonHi]}.`);
+  return notes;
+}
+
+export const PANEL_CAPTION = "Each row changes one input and keeps every other input as entered. Cash only, before tax, at your "
+  + "share of each cost and saving. Values are rounded up where a row says 'at least' and down where it says 'at most'.";
+
+/**
+ * The "What would make it pay" panel (9.5 item 9), from analyze(a), targetTest(a) and solveDrivers(a): its title,
+ * caption, columns, one row per driver ({ input, entered, target, horizon, notes }) and the notes under it, each only
+ * when it applies: the test runs past the horizon; a capital line's residual is used as entered; and each warning the
+ * N-year test raises itself, prefixed "<N>-year test: ".
+ */
+export function paybackPanel(a, r, test, rows) {
+  const N = test.years, T = r.T;
+  const notes = [];
+  if (N > T) notes.push(`This test assumes the same prices continue to year ${N}.`);
+  const entered = buildLines(a).some((l) => l.kind === "cost" && l.timing === "capital" && ["pctOfCost", "amount"].includes(l.residual?.mode));
+  if (entered) {
+    notes.push(`Equipment value left at year ${N} uses the residual you entered as a percentage of cost or an amount; it is not recalculated for year ${N}.`);
+  }
+  for (const w of test.warnings) {
+    const text = noticeText(w);
+    if (text) notes.push(`${N}-year test: ${text}`);
+  }
+  return {
+    title: "What would make it pay",
+    caption: PANEL_CAPTION,
+    columns: ["Input", "You entered", `To pay for itself within ${count(N, "year")}`, `To break even over ${count(T, "year")}`],
+    rows: rows.map((row) => ({ input: row.label, entered: enteredText(row), target: cellText(row, "target", N, T),
+      horizon: cellText(row, "horizon", N, T), notes: clipNotes(row) })),
+    notes,
+  };
+}
+
+/**
+ * The verdict's "It would pay" sentence (9.5 item 1), when the N-year test fails: the first two drivers of the ranking
+ * (rankDrivers), each "<label> at least <value> (you entered <entered>)" or "at most", with "(left blank)" for a blank
+ * driver; with none, "No single input in the panel makes it pay for itself within N years." null when the test does not
+ * fail.
+ */
+export function wouldPaySentence(test, rows) {
+  if (test.pays !== false) return null;
+  const within = `within ${count(test.years, "year")}`;
+  const named = rankDrivers(rows).slice(0, 2);
+  if (!named.length) return `No single input in the panel makes it pay for itself ${within}.`;
+  const phrase = (row) => `${lowerFirst(row.label)} ${solvedText(row, row.target)} ${row.blank ? "(left blank)" : `(you entered ${enteredText(row)})`}`;
+  return `It would pay for itself ${within} if: ${named.map(phrase).join(", or ")}.`;
 }
