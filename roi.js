@@ -1307,7 +1307,8 @@ const IN_PROPORTION = (label, y) => `${label} (year ${y}; other years in proport
 function pathDriver(a, d, years) {
   const raw = getPath(a, d.path);
   const e = yearEntry(raw, years);
-  const isBlank = blank(raw) || (Array.isArray(raw) && raw.every(blank));
+  // A list is blank when it is blank in every year the input is used (or in every year, when it is used in none).
+  const isBlank = blank(raw) || (Array.isArray(raw) && (raw.every(blank) || (years.length > 0 && years.every((t) => blank(at(raw, t))))));
   return { ...d, label: e.varies ? IN_PROPORTION(d.label, e.y) : d.label, entered: isBlank ? null : num(e.value), blank: isBlank, na: d.na ?? null };
 }
 
@@ -1461,7 +1462,9 @@ function eidDrivers(a) {
     out.push({ ...premium, label: varies ? IN_PROPORTION(premium.label, y) : premium.label, na: null,
       entered: head(a, y) * (num(p.saleCwt) * num(p.premiumPerCwt) - num(p.verificationFee)),
       // Only the net amount enters cash, so the trial sets it as one premium per cwt on 1 cwt (judgment, 9.3).
-      set: (b, v) => setPath(b, "eid.premium", { saleCwt: 1, premiumPerCwt: v / head(b, y), verificationFee: 0 }) });
+      // The premium per head is set from the head of this analysis, not of the state it is applied to, so that with
+      // herd size also moved (the two-way grid) the premium scales with the head as herd size alone would scale it.
+      set: (b, v) => setPath(b, "eid.premium", { saleCwt: 1, premiumPerCwt: v / head(a, y), verificationFee: 0 }) });
   }
 
   if (["cowTags", "calfTags", "retags"].some((id) => a.costs?.[id])) {
@@ -1478,30 +1481,35 @@ function eidDrivers(a) {
       set: (b, v) => ids.reduce((n, id) => setPath(n, `costs.${id}.unitCost`, times(n.costs[id].unitCost, v / total)), b) });
   }
 
-  // Added hours: the handling hours and labor.added hours of year y; every handling time input and added item's hours
-  // move in proportion.
+  out.push(addedHoursDriver(a));
+  return out;
+}
+
+/**
+ * Added hours (9.3; an EID driver, and a sensitivity entry in every module): the handling hours and labor.added hours
+ * of year y; every handling time input and added item's hours move in proportion. "n/a" with no added hours.
+ */
+function addedHoursDriver(a) {
+  const T = a.settings.T, s = a.startYear ?? 0, years = range(s + 1, T);
   const herd = herdOf(a, T), handling = handlingHours(a, herd, s, T);
   const added = (t) => handling[t] + sum((a.labor?.added ?? []).map((item) => addedHours(item.hours, t, s, T)));
   const ya = years.find((t) => added(t) > 0);
   const hours = { id: "addedHours", path: "addedHours", label: "Added hours", unit: "h/yr", lo: 0, hi: 2000, blank: false };
-  if (ya === undefined) out.push({ ...hours, entered: 0, na: "noAddedHours" });
-  else {
-    const entered = added(ya), varies = years.some((t) => added(t) !== entered);
-    const set = (b, v) => {
-      const f = v / entered;
-      let n = b;
-      const scale = (path) => {
-        const x = getPath(n, path);
-        if (x !== undefined) n = setPath(n, path, times(x, f));
-      };
-      (b.labor?.handling?.events ?? []).forEach((_, i) => scale(`labor.handling.events.${i}.minutesPerHead`));
-      if (b.labor?.handling) ["hoursPerGather", "hoursPerDay"].forEach((k) => scale(`labor.handling.${k}`));
-      (b.labor?.added ?? []).forEach((_, i) => scale(`labor.added.${i}.hours`));
-      return n;
+  if (ya === undefined) return { ...hours, entered: 0, na: "noAddedHours" };
+  const entered = added(ya), varies = years.some((t) => added(t) !== entered);
+  const set = (b, v) => {
+    const f = v / entered;
+    let n = b;
+    const scale = (path) => {
+      const x = getPath(n, path);
+      if (x !== undefined) n = setPath(n, path, times(x, f));
     };
-    out.push({ ...hours, label: varies ? IN_PROPORTION(hours.label, ya) : hours.label, entered, na: null, set });
-  }
-  return out;
+    (b.labor?.handling?.events ?? []).forEach((_, i) => scale(`labor.handling.events.${i}.minutesPerHead`));
+    if (b.labor?.handling) ["hoursPerGather", "hoursPerDay"].forEach((k) => scale(`labor.handling.${k}`));
+    (b.labor?.added ?? []).forEach((_, i) => scale(`labor.added.${i}.hours`));
+    return n;
+  };
+  return { ...hours, label: varies ? IN_PROPORTION(hours.label, ya) : hours.label, entered, na: null, set };
 }
 
 /**
@@ -1614,6 +1622,223 @@ export function rankDrivers(rows) {
     .filter((x) => x.k !== null && !(x.r.blank && x.r.price))
     .sort((x, y) => (x.k === y.k ? x.i - y.i : x.k < y.k ? -1 : 1))
     .map((x) => x.r);
+}
+
+// ---------------------------------------------------------------- sensitivity (9.5 item 6)
+
+// What one unit of a perDevice line counts, by module and line id.
+const DEVICES = {
+  water: { monitors: "monitor", subscription: "monitor", batteries: "monitor" },
+  vf: { collars: "collar", serviceFee: "collar", collarBatteries: "battery", baseStations: "base station", collarLoss: "collar" },
+  eid: { cowTags: "tag", calfTags: "tag", retags: "tag" },
+};
+
+/**
+ * The unit of cost line id's unitCost in analysis a (9.4): "$ per monitor", "$/head/month" (perHeadMonth and
+ * perHeadYear, whose price is per head per month, 9.2), "$/yr" or "$". The page and the tornado use the same unit.
+ */
+export function priceUnit(a, id) {
+  const c = a.costs?.[id] ?? {};
+  if (a.module === "water" && id === "subscription") return "$ per monitor per year";
+  if (a.module === "vf" && id === "serviceFee") return "$ per collar per year";
+  const device = own(DEVICES[a.module], id);
+  if (device) return `$ per ${device}`;
+  if (c.basis === "perHeadMonth" || c.basis === "perHeadYear") return "$/head/month";
+  if (c.basis === "perDevice") return c.classes?.length ? "$/head" : "$ per device";
+  return c.timing === "annual" ? "$/yr" : "$";
+}
+
+// The reader and scale lines, whose prices the EID "Reader and scale cost" entry moves together (9.3, 9.5 item 6).
+const READER_LINES = ["reader", "indicatorBars", "platform"];
+
+/**
+ * The sensitivity entries of analysis a (9.5 item 6), one per tornado bar, in the order of the 9.5 item 6 table:
+ * [{ id, path, label, unit, inputUnit, zeroRange, product, set, entered, blank, price, lines, max }]. path is the input the
+ * entry moves (or the B9 driver's name, as "herd"); unit is that input's unit, or $/yr for a product ($ for the
+ * fence); inputUnit is the unit of the value the entry moves; zeroRange is [lo, hi] in the stored unit when the entry
+ * is tested over a range while entered as 0 (collar loss: [0, 0.07]), else null; product is the id of the line whose
+ * factors the entry stands for, or null; set is the B9 driver's linked move, or null. entered is the value the entry
+ * moves (entry y of a per-year input, as for a B9 driver), blank marks a blank value, price marks an entry whose blank
+ * is a price ("Quote required") or whose product holds one (the collar-loss charge), and lines names the cost lines
+ * whose prices it moves, for the "Quote required" check; max, when not null, is the most the value moves to (a
+ * share's cap). Like PAYBACK_DRIVERS(a), it leaves out an entry whose input
+ * has nothing to act on (9.3), the weight-gain entry while production.classes is empty and the avoided-hire entry
+ * while labor.avoidedHire.salary is blank.
+ */
+export function SENSITIVITY_INPUTS(a) {
+  const m = a.module, T = a.settings.T, s = a.startYear ?? 0, ops = range(s + 1, T);
+  const drivers = PAYBACK_DRIVERS(a), driver = (id) => drivers.find((d) => d.id === id);
+  const out = [];
+  // An entry moves every year of a per-year input by the same factor, so its label needs no "(year y; …)".
+  const add = (d, extra = {}) => out.push({ id: d.id, path: d.path, label: d.label.replace(/( \(year \d+; other years in proportion\))+$/, ""),
+    unit: d.unit, inputUnit: d.unit, zeroRange: null, product: null, set: d.set ?? null, entered: d.entered, blank: !!d.blank,
+    price: !!d.price, lines: [], max: null, ...extra });
+  const input = (id, path, label, unit, years) => pathDriver(a, { id, path, label, unit, lo: 0, hi: 0 }, years);
+  const product = (d, id, extra = {}) => add(d, { unit: "$/yr", inputUnit: d.unit, product: id, ...extra });
+
+  add(herdDriver(a));
+  add(input("discountRate", "settings.discountRate", "Discount rate", "%/yr", [s]));
+  if (m === "water") {
+    // A share moves from the value typed (not the capped share the B9 driver starts from, so a share typed above a
+    // cap of 0 is tested, not "entered as 0"), up to its block's cap, the most the analysis uses (9.3).
+    drivers.filter((d) => d.id.startsWith("share:")).forEach((d) => {
+      add(d, { max: d.hi, entered: d.blank ? d.entered : num(a.water.blocks[Number(d.id.slice(6))].shareAvoided) });
+    });
+    if (driver("vehicle")) product(driver("vehicle"), "vehicle");
+  }
+  const cut = a.labor?.cut;
+  if (cut && (m === "water" || m === "eid")) {
+    product(input("laborCut", "labor.cut.unitsCut", "Hired labor cut", LABOR_UNITS[cut.laborUnit] ?? "hours", ops), "laborCut");
+  }
+  if (cut && m === "vf") {
+    // In paid hours, through the B9 driver's set; while it is n/a (no set), in its own units at its path.
+    const d = driver("hoursCut");
+    product(d.set ? d : input("hoursCut", "labor.cut.unitsCut", d.label, LABOR_UNITS[cut.laborUnit] ?? "hours", ops), "laborCut");
+  }
+  const hire = a.labor?.avoidedHire;
+  if (hire && !blank(hire.salary)) product(input("avoidedHire", "labor.avoidedHire.salary", "Avoided hire", "$/yr", [s]), "avoidedHire");
+  if (a.labor?.handling || a.labor?.added?.length) add(addedHoursDriver(a));
+  if (m === "water") {
+    for (const id of ["monitors", "subscription"]) if (driver(id)) add(driver(id), { lines: [id] });
+  }
+  if (m === "vf") {
+    if (driver("fenceCost")) {
+      product(driver("fenceCost"), "fence", { label: "Interior fence that would otherwise be built", unit: "$" });
+    }
+    for (const id of ["subscription", "serviceFee"]) if (driver(id)) add(driver(id), { lines: [id] });
+    const loss = a.vf?.collarLoss;
+    if (loss) {
+      // Its product holds the loss charge, a price: blank, it reads "Quote required" (9.2).
+      product(input("collarLoss", "vf.collarLoss.pctPerYear", "Collar loss", "%", ops), "collarLoss",
+        { zeroRange: [0, 0.07], blank: blank(loss.chargePerCollar), price: true, lines: ["collarLoss"] });
+    }
+  }
+  if (m === "eid") {
+    // With no calves sold the premium has nothing to act on, and is left out like added hours with none (9.3).
+    if (driver("premium").na === null) add(driver("premium"));
+    if (driver("tagPrice")) add(driver("tagPrice"), { lines: ["cowTags", "calfTags", "retags"] });
+    if (a.costs?.retags) add(input("retagPct", "eid.retagPct", "Retag rate", "%/yr", ops));
+    if (driver("readerScale")) add(driver("readerScale"), { lines: READER_LINES });
+    if (a.eid?.dosing) product(input("dosing", "eid.dosing.perApplication", "Dosing savings", "$/head/application", ops), "dosing");
+  }
+  if ((m === "vf" || m === "eid") && a.production?.classes?.length) {
+    product(input("production", "production.lbPerHeadPerDay", "Weight gain", "lb/head/day", ops), "production");
+  }
+  if (m === "water" || m === "vf") {
+    (a.riskLines ?? []).forEach((r, i) => {
+      product(input(`risk:${i}`, `riskLines.${i}.eventsPerYear`, lineLabel(a, `risk:${i}`), "events/yr", ops), `risk:${i}`);
+    });
+  }
+  // Each other cost line that stores its own unitCost, by its label: not the lines whose price an entry above moves
+  // (only those added: a virtual fence state without vf.pricing has no price entry, so its subscription is one of
+  // these), the tag lines (eid.tagPrice) or collar loss (the loss charge).
+  const moved = new Set(out.flatMap((e) => e.lines));
+  for (const line of moduleCostLines(a)) {
+    const id = line.id;
+    if (moved.has(id) || line.tag || id === "collarLoss" || !Object.hasOwn(own(a.costs, id) ?? {}, "unitCost")) continue;
+    add({ ...input(`cost:${id}`, `costs.${id}.unitCost`, lineLabel(a, id), priceUnit(a, id), priceYears(a, id)), price: true }, { lines: [id] });
+  }
+  return out;
+}
+
+export const SWING = 0.2; // the tornado's move, 20% down and up, until B1 adds scenario ranges (9.5 item 6)
+
+/**
+ * The analysis with entry e (SENSITIVITY_INPUTS) at value v, and v itself, moved toward the entry's value until it
+ * passes the two 9.2 rules that bound a driver (paid hours cut within the hours saved, a residual within the cost of
+ * its purchase), as the solver clips its range (9.3, 9.5 item 6).
+ */
+function moveEntry(a, e, v) {
+  const capped = e.max !== null && v > e.max;
+  if (capped) v = e.max;
+  const trial = (x) => moveDriver(a, e, x);
+  const state = trial(v);
+  if (clipReason(state) === null) return { value: v, state, capped, clipped: false };
+  let good = e.blank ? 0 : e.entered, bad = v;
+  for (let i = 0; i < HALVINGS; i++) {
+    const mid = (good + bad) / 2;
+    if (mid === good || mid === bad) break; // no number lies between them
+    if (clipReason(trial(mid)) === null) good = mid; else bad = mid;
+  }
+  return { value: good, state: trial(good), capped, clipped: true };
+}
+
+/** A width to 10 significant figures, so bars that tie in exact arithmetic tie here too (as rankDrivers, judgment). */
+const tenFigures = (x) => Number(x.toPrecision(10));
+
+/**
+ * The tornado (9.5 item 6): each entry of SENSITIVITY_INPUTS(a) moved to its value × 0.8 and × 1.2, one at a time, or,
+ * entered as 0, to the ends of its zeroRange; the cash NPV at each end. Returns { base, bars, leftBlank, zeroNotTested,
+ * noEffect, zeroTested }: bars [{ id, label, unit, inputUnit, path, product, lowValue, highValue, low, high, width }],
+ * widest first, ties in the order of the entries; and the entries without a bar, by label in the order of the
+ * entries: leftBlank (a blank price, or a product holding one, on a line with a quantity in some year), zeroNotTested
+ * (entered as 0, or a cleared benefit input, with no zeroRange) and noEffect (a bar narrower than $0.005). An entry
+ * with a blank price on a line with no quantity in any year is not listed (9.5 item 7). zeroTested lists the entries
+ * tested over their zeroRange, { label, lo, hi, unit }, for the caption. Assumes validate(a) found no errors.
+ */
+export function tornado(a, full = analyze(a)) {
+  const quote = new Set(full.notices.filter((n) => n.type === "quoteRequired").map((n) => n.lineId));
+  const t = { base: full.cashNPV, bars: [], leftBlank: [], zeroNotTested: [], noEffect: [], zeroTested: [] };
+  SENSITIVITY_INPUTS(a).forEach((e, i) => {
+    if (e.blank && e.price) {
+      if (e.lines.some((id) => quote.has(id))) t.leftBlank.push(e.label);
+      return;
+    }
+    const value = e.blank ? 0 : num(e.entered);
+    let ends;
+    // Lower value first, also for a negative value (a net program premium below its fee).
+    if (value !== 0) ends = [value * (1 - SWING), value * (1 + SWING)].sort((x, y) => x - y);
+    else if (e.zeroRange) {
+      ends = e.zeroRange;
+      t.zeroTested.push({ label: e.label, lo: ends[0], hi: ends[1], unit: e.inputUnit });
+    } else {
+      t.zeroNotTested.push(e.label);
+      return;
+    }
+    const [lo, hi] = ends.map((v) => moveEntry(a, e, v));
+    const low = analyze(lo.state).cashNPV, high = analyze(hi.state).cashNPV, width = Math.abs(high - low);
+    if (!(width >= ZERO)) {
+      t.noEffect.push(e.label);
+      return;
+    }
+    t.bars.push({ i, id: e.id, label: e.label, unit: e.unit, inputUnit: e.inputUnit, path: e.path, product: e.product,
+      entered: value, lowValue: lo.value, highValue: hi.value, low, high, width });
+  });
+  t.bars.sort((x, y) => tenFigures(y.width) - tenFigures(x.width) || x.i - y.i);
+  return t;
+}
+
+export const GRID_STEPS = [0.6, 0.8, 1, 1.2, 1.4]; // the two-way grid: 40% below to 40% above the value entered
+
+/**
+ * The two-way grid (9.5 item 6): cash NPV over the values of the entries with the two longest bars of the tornado, never
+ * two factors of one product. Each axis is the entry's value × GRID_STEPS, or, entered as 0, five steps across its
+ * zeroRange, each value capped and clipped as in the tornado. Returns { rows, cols, cells, base } with rows and cols
+ * { id, label, inputUnit, values, zeroRange, capped, clipped } (capped: a share was held at its block's cap; clipped: a
+ * value was moved to pass a 9.2 rule), cells[r][c] the cash NPV with both moved (null when the pair breaks a 9.2 rule
+ * that bounds a driver), and base [r, c], the cell of the values entered. null with fewer than two bars.
+ */
+export function twoWayGrid(a, t = tornado(a)) {
+  const entries = SENSITIVITY_INPUTS(a);
+  const [first, ...rest] = t.bars;
+  const second = rest.find((b) => b.product === null || b.product !== first.product);
+  if (!first || !second) return null;
+  const axis = (bar) => {
+    const e = entries[bar.i], value = e.blank ? 0 : num(e.entered);
+    const raw = value !== 0 ? GRID_STEPS.map((f) => value * f).sort((x, y) => x - y)
+      : GRID_STEPS.map((_, k) => e.zeroRange[0] + (e.zeroRange[1] - e.zeroRange[0]) * k / (GRID_STEPS.length - 1));
+    const moved = raw.map((v) => moveEntry(a, e, v));
+    return { e, id: e.id, label: e.label, inputUnit: e.inputUnit, zeroRange: value === 0 ? e.zeroRange : null,
+      values: moved.map((m) => m.value), capped: moved.some((m) => m.capped), clipped: moved.some((m) => m.clipped),
+      base: value !== 0 ? GRID_STEPS.indexOf(1) : 0 };
+  };
+  const rows = axis(first), cols = axis(second);
+  const cells = rows.values.map((rv) => cols.values.map((cv) => {
+    const b = moveDriver(moveDriver(a, rows.e, rv), cols.e, cv);
+    return clipReason(b) === null ? analyze(b).cashNPV : null;
+  }));
+  const strip = ({ e, base, ...x }) => x;
+  return { rows: strip(rows), cols: strip(cols), cells, base: [rows.base, cols.base] };
 }
 
 // ---------------------------------------------------------------- validation (9.2)
