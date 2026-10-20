@@ -59,7 +59,8 @@ is a copy: change the repository first, then refresh the copy. Code stays in Git
 owner needs it there. The filing rules for Drive:
 
 - Everything for this project lives inside `Ranch Tech ROI`: never at the top of My Drive, in another project's
-  folder, or loose anywhere else.
+  folder, or loose anywhere else. Only material shared between projects lives outside a project folder.
+- Every folder and subfolder, in Drive and under `docs/`, has a `README.md` saying what belongs in it.
 - Every file goes in the folder for its kind, and the folders mirror `docs/` with the same names: `audit` (the plan,
   spec, evidence table, sources and prototype), `images` (README and page screenshots), `training` (outline, `deck`,
   `shots`) and `archive` (dated material kept for the record). Only `AGENTS.md`, `README.md` and `Docs index.md`

@@ -11,5 +11,5 @@ the same folders (My Drive > `Ranch Tech ROI`). Change a file here first, then r
 | [`archive/`](archive/) | Dated material kept for the record, not for building against: the 14 Oct 2026 handoff note and screenshots of the version 1 page | `Ranch Tech ROI/archive` |
 
 Adding material: put it in the folder it belongs to. Add a new folder (here and in Drive, and a row above) only for a
-new kind of material. Name dated material `YYYY-MM-DD-what`. Instructions for AI agents are in
+new kind of material. Name dated material `YYYY-MM-DD-what`. Every folder has a `README.md` saying what belongs in it. Instructions for AI agents are in
 [`../AGENTS.md`](../AGENTS.md).
