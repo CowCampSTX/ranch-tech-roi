@@ -631,3 +631,13 @@ test("migrateV1: the mapping table of 9.5 item 8, field by field", () => {
   assert.equal(noSub.state.costs.v1Subscription, undefined);
   assert.doesNotMatch(linkBanner(noSub), /billed at the start of each year/);
 });
+
+test("V1_FIELDS and V1_PRESETS are still the inputs and starting points of commit d0fd9b8 (B8)", async () => {
+  // The page no longer runs on version 1's model, so v1.js keeps only these two constants, which migrateV1() reads.
+  // The hash is of commit d0fd9b8's FIELDS and PRESETS (roi.js), unchanged.
+  const { V1_FIELDS, V1_PRESETS } = await import("../v1.js");
+  const { createHash } = await import("node:crypto");
+  const hash = createHash("sha256").update(JSON.stringify({ V1_FIELDS, V1_PRESETS })).digest("hex");
+  assert.equal(hash, "aa275f01cf350d7606ef09481b2e31a8b553517f4f67ad70922d38145c2b0aaa");
+  assert.deepEqual(Object.keys(V1_PRESETS), ["Collar-based virtual fencing", "Remote water monitoring", "EID tags and scale"]);
+});

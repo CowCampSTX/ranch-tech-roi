@@ -4,77 +4,152 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ranch Tech ROI · Fleming Cattle Co.</title>
-<meta name="description" content="Will a piece of ranch technology pay for itself? Enter your numbers and see NPV, payback and which assumptions matter most.">
+<meta name="description" content="Will a piece of ranch technology pay for itself? Start from a synthetic example ranch, enter your own numbers and see the cash NPV, the payback, what would make it pay and which inputs matter most. Before tax.">
 <style>
 :root {
   color-scheme: dark;
-  --page: #000000; --surface: #141414; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a988f;
-  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.12);
-  --s1: #3987e5; --s2: #d95926; --good: #0ca30c; --bad: #e66767;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #222220; --input: #121211;
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a988f;
+  --grid: #2c2c2a; --axis: #4a4945; --border: rgba(255,255,255,0.10); --border-2: rgba(255,255,255,0.18);
+  --s1: #3987e5; --s2: #d95926; --good: #0ca30c; --bad: #e66767; --warn: #fab219;
   --pos-1: #1c3a5e; --pos-2: #1c5cab; --neg-1: #4a2322; --neg-2: #8f3534; --mid: #383835;
-  --input: #1e1e1d;
-  --brand: #b8862f; --brand-ink: #e9c98a;
+  --brand: #b8862f; --brand-ink: #e9c98a; --brand-wash: rgba(184,134,47,0.12);
+  --A: #3987e5; --B: #199e70; --C: #c98500; --D: #9085e9; --E: #898781;
+  --radius: 12px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header, main { max-width: 1240px; margin: 0 auto; padding: 0 16px; }
-header { padding-top: 28px; padding-bottom: 8px; }
-h1 { font-size: 26px; margin: 0 0 4px; }
-h2 { font-size: 17px; margin: 0 0 4px; }
-h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); margin: 18px 0 6px; }
+header, main { max-width: 1320px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 26px; padding-bottom: 10px; }
+h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 17px; margin: 0 0 6px; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 18px 0 6px; }
+h4 { font-size: 13px; color: var(--brand-ink); margin: 14px 0 4px; font-weight: 600; }
 p { margin: 0 0 8px; }
-.sub { color: var(--ink-2); max-width: 760px; }
+a { color: #6da7ec; }
+.sub { color: var(--ink-2); max-width: 820px; font-size: 16px; }
 .note { color: var(--muted); font-size: 13px; }
-main { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 20px; padding-bottom: 40px; align-items: start; }
-@media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-.inputs { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
-@media (max-width: 860px) { .inputs { position: static; max-height: none; } }
-.row { display: grid; grid-template-columns: 1fr 104px; gap: 8px; align-items: center; margin: 4px 0; }
-.row label { font-size: 14px; }
-.row label small { display: block; color: var(--muted); font-size: 12px; }
-input, select, button { font: inherit; color: var(--ink); }
-input[type=number] { width: 100%; padding: 5px 7px; border: 1px solid var(--axis); border-radius: 6px; background: var(--input); text-align: right; font-variant-numeric: tabular-nums; }
-select { width: 100%; padding: 6px; border: 1px solid var(--axis); border-radius: 6px; background: var(--input); }
-button { padding: 6px 10px; border: 1px solid var(--axis); border-radius: 6px; background: var(--input); cursor: pointer; }
+.note:empty, .error:empty { display: none; }
+main { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 20px; padding-bottom: 48px; align-items: start; }
+@media (max-width: 960px) { main { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; min-width: 0; }
+.inputs { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; padding: 16px; }
+@media (max-width: 960px) { .inputs { position: static; max-height: none; } }
+.inputs > label h2 { margin-bottom: 6px; }
 .results { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
-.tile .k { color: var(--ink-2); font-size: 13px; }
-.tile .v { font-size: 26px; font-weight: 600; }
-.tile .d { color: var(--muted); font-size: 12px; }
-.verdict { font-size: 16px; }
-.verdict b.good { color: var(--good); } .verdict b.bad { color: var(--bad); }
+.results.invalid > .card:not(:first-child) { display: none; }
+
+/* inputs */
+input, select, button, textarea { font: inherit; color: var(--ink); }
+input[type=number], input[type=text], select {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--axis); border-radius: 7px; background: var(--input);
+}
+input[type=number] { text-align: right; font-variant-numeric: tabular-nums; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+input[type=number]::placeholder { color: var(--muted); }
+button { padding: 6px 11px; border: 1px solid var(--border-2); border-radius: 7px; background: var(--surface-2); cursor: pointer; }
+button:hover { border-color: var(--brand); }
+button.primary { background: var(--brand); border-color: var(--brand); color: #15110a; font-weight: 600; }
+button.link { background: none; border: none; padding: 0; color: #6da7ec; text-decoration: underline; font-size: 13px; }
+button.small { padding: 2px 8px; font-size: 12px; }
+.toolbar { display: flex; gap: 8px; margin: 10px 0 8px; flex-wrap: wrap; }
+.toggle { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2); margin: 4px 0 10px; }
+.group { border-top: 1px solid var(--border); padding: 4px 0 8px; }
+.group > summary { cursor: pointer; font-weight: 650; font-size: 15px; padding: 10px 0 6px; list-style: none; display: flex; align-items: center; gap: 8px; }
+.group > summary::-webkit-details-marker { display: none; }
+.group > summary::before { content: "▸"; color: var(--brand); transition: transform .15s; }
+.group[open] > summary::before { transform: rotate(90deg); }
+.field { margin: 8px 0; }
+.field .row { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 8px; align-items: center; }
+.field.wide .row { grid-template-columns: minmax(0, 1fr); }
+.field.sel .row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+.field label { font-size: 14px; }
+.field label small, .unit { color: var(--muted); font-size: 12px; }
+.field .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 12px; color: var(--muted); margin-top: 3px; }
+.field .help { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.field .quote { color: var(--warn); font-size: 12px; font-weight: 600; }
+.field .flag { color: var(--warn); }
+.field.error-field input, .field.error-field select { border-color: var(--bad); }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.field.adv { display: none; }
+.show-advanced .field.adv { display: block; }
+.years { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 4px; margin-top: 4px; }
+.years label { font-size: 11px; color: var(--muted); display: block; }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.item { background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; margin: 8px 0; }
+.item > .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.item details { margin-top: 6px; font-size: 13px; }
+.item details > summary { cursor: pointer; color: var(--ink-2); }
+.addkey { display: flex; gap: 6px; margin: 8px 0; }
+.addkey select { flex: 1; }
+.banner { border-radius: 9px; padding: 10px 12px; margin: 8px 0; font-size: 13px; background: var(--brand-wash); border: 1px solid rgba(184,134,47,0.35); color: var(--brand-ink); }
+.banner.link { background: rgba(57,135,229,0.10); border-color: rgba(57,135,229,0.35); color: #b7d3f6; }
+.error { color: var(--bad); font-size: 12px; margin-top: 3px; }
+
+/* badges (9.5 item 3 and 4): A official, B research, C vendor, D yours, E made-up example */
+.badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 5px; font: 700 11px/17px system-ui, sans-serif; text-align: center;
+  color: #0d0d0d; background: var(--E); vertical-align: 1px; }
+.badge.A { background: var(--A); } .badge.B { background: var(--B); } .badge.C { background: var(--C); } .badge.D { background: var(--D); }
+.badge.E { background: transparent; color: var(--ink-2); border: 1px dashed var(--muted); font-style: italic; line-height: 15px; }
+.legend-badges { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--ink-2); margin: 6px 0 10px; }
+
+/* verdict and tiles */
+.verdict p { font-size: 15px; margin: 0 0 8px; color: var(--ink-2); }
+.verdict p.main { font-size: 18px; line-height: 1.45; color: var(--ink); }
+.verdict p.indicative { color: var(--warn); font-weight: 600; font-size: 13px; }
+.verdict p.target { font-weight: 650; color: var(--ink); }
+.verdict p.notes { color: var(--warn); font-size: 13px; }
+.verdict p.prices { color: var(--muted); font-size: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-top: 12px; }
+.tile { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .k { color: var(--ink-2); font-size: 12px; }
+.tile .v { font-size: 22px; font-weight: 650; margin-top: 2px; line-height: 1.25; }
+.tile.headline { border-color: rgba(184,134,47,0.45); }
+.tile .v.long { font-size: 14px; font-weight: 600; }
+.neg { color: var(--bad); }
+.pos { color: var(--good); }
+
+/* charts */
 svg { display: block; width: 100%; height: auto; overflow: visible; }
 svg text { fill: var(--muted); font: 12px system-ui, sans-serif; }
 svg .lbl { fill: var(--ink-2); }
+svg .strong { fill: var(--ink); font-weight: 600; }
 .legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin: 4px 0 8px; flex-wrap: wrap; }
 .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
-table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 14px; }
-th, td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: right; }
+.scroll { overflow-x: auto; }
+.chart { min-width: 620px; }
+.tip { position: fixed; pointer-events: none; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border-2);
+  box-shadow: 0 6px 22px rgba(0,0,0,.45); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: none; z-index: 10; max-width: 300px; }
+
+/* tables */
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--grid); text-align: right; vertical-align: top; }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--ink-2); font-weight: 600; }
-.scroll { overflow-x: auto; }
-.chart { min-width: 600px; }
-th { white-space: nowrap; }
-.neg { color: var(--bad); }
-.pos { color: var(--good); }
-.error { color: var(--bad); }
-.error:empty, .note:empty { display: none; }
-.results.invalid > .card:not(:first-child) { display: none; }
-a { color: var(--s1); }
-.sources td, .sources th { text-align: left; vertical-align: top; white-space: normal; }
-.formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: var(--ink-2); }
+thead th { position: sticky; top: 0; background: var(--surface); }
+.year th { white-space: nowrap; min-width: 92px; }
+.year th small { display: block; font-weight: 400; color: var(--warn); white-space: normal; }
+.year td.total, .year th.total { background: rgba(255,255,255,0.025); }
+.year td.risk, .year th.risk { color: var(--ink-2); font-style: italic; }
+.year tr.note td { color: var(--muted); font-size: 12px; text-align: left; border-bottom: none; padding-top: 0; }
+.panel td, .panel th { text-align: left; }
+.panel td small { display: block; color: var(--muted); }
+.grid td { text-align: center; color: var(--ink); white-space: nowrap; }
+.grid td.base { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 700; }
+.grid th { white-space: nowrap; }
+.left, .left td, .left th { text-align: left; }
+.formula { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--ink-2); margin: 0 0 6px; }
 .formula b { color: var(--ink); font-weight: 600; }
-.grid td { text-align: center; }
-.grid td.cell { color: var(--ink); }
-.tip { position: fixed; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,.15); border-radius: 8px; padding: 8px 10px; font-size: 13px; display: none; z-index: 10; max-width: 260px; }
-.toolbar { display: flex; gap: 8px; margin: 10px 0 4px; flex-wrap: wrap; }
-.brand { display: flex; align-items: center; gap: 14px; padding: 14px 24px; background: linear-gradient(180deg, #17120a, #000); border-bottom: 2px solid var(--brand); }
+ul.plain { margin: 0 0 8px; padding-left: 18px; }
+ul.plain li { margin: 3px 0; }
+.warning { color: var(--warn); font-weight: 600; }
+
+/* brand */
+.brand { display: flex; align-items: center; gap: 14px; padding: 14px 24px; background: linear-gradient(180deg, #17120a, #0d0d0d); border-bottom: 2px solid var(--brand); }
 .brand svg { width: 40px; height: 40px; flex: none; overflow: visible; }
 .brand .name { font: 700 22px/1.1 Georgia, "Times New Roman", serif; letter-spacing: .08em; text-transform: uppercase; color: var(--brand-ink); }
 .brand .tag { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-top: 3px; }
-@media (max-width: 520px) { .brand { padding: 12px 16px; } .brand .name { font-size: 18px; } }
+@media (max-width: 520px) { .brand { padding: 12px 16px; } .brand .name { font-size: 18px; } h1 { font-size: 24px; } }
 </style>
 </head>
 <body>
@@ -87,43 +162,76 @@ a { color: var(--s1); }
 </div>
 <header>
   <h1>Ranch Tech ROI</h1>
-  <p class="sub">Will a piece of ranch technology pay for itself on your operation? Pick a starting point, replace the numbers
-    with your own quotes and records, and see the payback, the net present value and which assumptions the answer
-    really depends on. Every calculation is shown below the charts.</p>
-  <p class="note">Synthetic example ranch. Made-up numbers for demonstration, not any real operation's data. Of the starting costs, only the water monitor's is a published price (a dealer's undated flyer). The virtual fence costs are vendor statements reported by the press and a figure from university comparison slides, not published list prices, and the EID costs have no published source (see Sources at the bottom). The benefits are assumptions to replace with your own records. Prices change, so get a quote before you decide.</p>
+  <p class="sub">Will a piece of ranch technology pay for itself on your operation? Start from an example ranch, replace its
+    numbers with your own quotes and records, and see the cash result, the payback, what would make it pay and which inputs
+    the answer turns on. Every result is before tax, and every calculation is written out below the charts.</p>
+  <p class="note">The four starting points are synthetic example ranches: made-up numbers for demonstration, not any real
+    operation's data. Each example price is labeled as what it is: a published list price, a price reported by the press,
+    or a synthetic placeholder with no published source (see Sources at the bottom). The benefits are assumptions to
+    replace with your own records. Prices change, so get a quote before you decide.</p>
 </header>
 <main>
   <section class="card inputs" aria-label="Inputs">
-    <label for="preset"><h2>Starting point</h2></label>
-    <select id="preset"></select>
-    <div class="toolbar"><button id="reset" type="button">Reset to starting point</button><button id="copy" type="button">Copy link to this scenario</button></div>
-    <div id="fields"></div>
+    <label for="example"><h2>Starting point</h2></label>
+    <select id="example"></select>
+    <div class="toolbar">
+      <button id="mine" type="button" class="primary">Analyze my operation</button>
+      <button id="reset" type="button">Reset</button>
+      <button id="copy" type="button">Copy link</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="showAdvanced"> Show advanced inputs</label>
+    <div id="banners"></div>
+    <div id="form"></div>
   </section>
+  <p class="sr-only" id="live" aria-live="polite"></p>
   <section class="results" id="results">
-    <div class="card"><p class="verdict" id="verdict"></p><div class="tiles" id="tiles"></div></div>
+    <div class="card verdict" id="verdictCard">
+      <div id="errors"></div>
+      <div id="verdict"></div>
+      <div class="tiles" id="tiles"></div>
+    </div>
+    <div class="card" id="panelCard">
+      <h2 id="panelTitle">What would make it pay</h2>
+      <p class="note" id="panelCaption"></p>
+      <div class="scroll"><table class="panel" id="panel"></table></div>
+      <ul class="plain note" id="panelNotes"></ul>
+    </div>
+    <div class="card" id="noticesCard">
+      <h2>Notes on this result</h2>
+      <ul class="plain" id="notices"></ul>
+      <h3>Left out of the result</h3>
+      <ul class="plain" id="leftOut"></ul>
+      <p class="note" id="leftOutEnd"></p>
+      <p class="warning" id="quoteWarning"></p>
+    </div>
     <div class="card">
       <h2>Cumulative cash position</h2>
-      <p class="note">Purchase in year 0, then each year's benefit minus running costs. Payback is where the line crosses zero.</p>
+      <p class="note" id="cumCaption"></p>
       <div class="scroll"><div id="cumChart" class="chart"></div></div>
     </div>
     <div class="card">
-      <h2>What the answer depends on</h2>
-      <p class="note">Net present value with each input moved 20% down and 20% up, one at a time. The longest bars are the numbers worth checking first.</p>
-      <div class="legend"><span><span class="sw" style="background:var(--s1)"></span>Input 20% lower</span><span><span class="sw" style="background:var(--s2)"></span>Input 20% higher</span></div>
+      <h2>What the answer turns on</h2>
+      <p class="note" id="tornadoCaption"></p>
+      <div class="legend" id="tornadoLegend"></div>
       <div class="scroll"><div id="tornado" class="chart"></div></div>
-      <h3>Break-even values</h3>
-      <p class="note">For the biggest drivers, the value at which this investment exactly breaks even (NPV = 0), holding everything else as entered.</p>
-      <div class="scroll"><table id="breakeven"></table></div>
+      <ul class="plain note" id="tornadoLists"></ul>
     </div>
-    <div class="card">
+    <div class="card" id="gridCard">
       <h2>Two inputs at once</h2>
       <p class="note" id="gridNote"></p>
       <div class="scroll"><table class="grid" id="grid"></table></div>
     </div>
     <div class="card">
       <h2>Year by year</h2>
-      <p class="note">Cash flows before income tax.</p>
-      <div class="scroll"><table id="cashTable"></table></div>
+      <p class="note" id="yearNote"></p>
+      <div class="legend-badges" id="badgeLegend"></div>
+      <div class="scroll"><table class="year" id="yearTable"></table></div>
+      <div id="others"></div>
+    </div>
+    <div class="card">
+      <h2>Every value and where it comes from</h2>
+      <p class="note">Each value the analysis uses, with its evidence class and source. A value you typed is yours [D].</p>
+      <div class="scroll"><table class="left" id="assumptions" tabindex="-1"></table></div>
     </div>
     <div class="card">
       <h2>How every number is calculated</h2>
@@ -131,15 +239,11 @@ a { color: var(--s1); }
     </div>
     <div class="card">
       <h2>Sources</h2>
-      <p class="note">Each cost in the starting values is described below as what it is: a published dealer price, a vendor statement reported by the press, a figure from university comparison slides, or a placeholder with no published source. They are listed for transparency and are not endorsements of any product. Benefit values (hours saved, weight gain, death loss avoided, other savings) are assumptions, not vendor claims.</p>
-      <table class="sources">
-        <tr><th>Starting point</th><th>Value used</th><th>Source</th></tr>
-        <tr><td>Collar-based virtual fencing</td><td>$4,500 one-time infrastructure; subscription under $7 per head per month (modeled as $84/head/yr, collars included). Vendor statements reported by the press, not published list prices.</td><td><a href="https://www.dtnpf.com/agriculture/web/ag/news/article/2025/04/01/virtual-fencing-ranchers-new-best">DTN/Progressive Farmer, 31 March 2025</a></td></tr>
-        <tr><td>Collar-based virtual fencing</td><td>$3,000 per base station (3 modeled for 1,000 head). A figure from university comparison slides, given when the slides said those collars were "not yet available" in the US, so not a published US price.</td><td><a href="https://rangelandsgateway.org/sites/default/files/users/user14/VFCompanyComparison.pdf">Virtual fence manufacturer comparison, Rangelands Gateway, 16 April 2024</a></td></tr>
-        <tr><td>Remote water monitoring</td><td>$1,490 per satellite water-level monitor; $365 per monitor per year (10 monitors modeled). A published dealer price.</td><td><a href="https://www.alltexirrigation.com/storage/UserFileFolder/Ranchbot_Flyer_-_All-Tex.pdf">Water monitor dealer flyer (All-Tex Irrigation), undated; checked 15 October 2026</a></td></tr>
-        <tr><td>EID tags and scale</td><td>$4 per tag, $12,000 for the reader, scale and setup, $1 per head per year</td><td>No published source. Placeholders: replace them with your quotes.</td></tr>
-        <tr><td>Fence comparison</td><td>Physical fence about $15,000 per mile to build, 2% a year to maintain</td><td><a href="https://pubs.nmsu.edu/_b/B133/index.html">New Mexico State University Extension, B-133</a></td></tr>
-      </table>
+      <p class="note">The examples' sourced values and placeholders, each described as what it is: official statistics,
+        research or extension, a published list price, a price reported by the press, or a synthetic placeholder with no
+        published source. Company and product names appear only in the linked citations, which are listed for
+        transparency and are not endorsements. Benefit values are assumptions, listed with each example's values above.</p>
+      <div class="scroll"><table class="left sources" id="sources"></table></div>
     </div>
   </section>
 </main>

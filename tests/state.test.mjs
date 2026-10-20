@@ -4,9 +4,12 @@
 // Run: node --test tests/*.test.mjs
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyze, validate } from "../roi.js";
+import { analyze, eidRuleClasses, MAX_YEARS, validate } from "../roi.js";
 import { example, EXAMPLE_IDS, VENDOR_FILLS } from "../examples.js";
-import { loadExample, reset, analyzeMine, setInput, keepRate, keepValue, useVendorPrice, removeItem, getAt } from "../state.js";
+import { addItem, loadExample, reset, analyzeMine, setInput, keepRate, keepValue, useVendorPrice, removeItem, getAt, addKey, addPart,
+  byYearReady, installHours, installShaped, isInstall, LINE_TEMPLATES, removeKey, setInstall, setPricing, setShare, toByYear, toFlat } from "../state.js";
+import { formFields, formGroups, INSTALL_EVERY_YEAR, newItem, shownValue } from "../form.js";
+import { readLink, writeLink } from "../links.js";
 import { verdictNotes, priceLabel, exampleRate, noticeText, EID_RULE_NOTICE } from "../text.js";
 
 const close = (a, b, tol = 1) => assert.ok(Math.abs(a - b) <= tol, `${a} != ${b} (±${tol})`);
@@ -147,26 +150,31 @@ test("setInput corrections: a negative number is 0 and a ramp value above 1 is 1
 });
 
 test("setInput on a per-year entry: the list holds one record; the ramp's entries are each their own (9.2, 9.5 item 8)", () => {
+  // Ranch D's training days, [0, 7, 0] with T = 7, count 0 in years 3 to 7 (the last value carried, 9.2). Typing year 2
+  // first gives the list its carried years through T, so only year 2 changes.
   const d = deepFreeze(loadExample("ranchD"));
   let b = setInput(d, "labor.handling.trainingDays.2", 5);
-  assert.deepEqual(b.labor.handling.trainingDays, [0, 7, 5]);
+  assert.deepEqual(b.labor.handling.trainingDays, [0, 7, 5, 0, 0, 0, 0, 0]);
   assert.deepEqual(b.prov["labor.handling.trainingDays"], YOURS);
   assert.equal("labor.handling.trainingDays.2" in b.prov, false);
+  const typedYear2 = structuredClone(d);
+  typedYear2.labor.handling.trainingDays = [0, 7, 5, 0, 0, 0, 0, 0];
+  close(cash(b), cash(typedYear2), 1e-6);
   b = setInput(b, "labor.handling.trainingDays.1", null);
-  assert.deepEqual(b.labor.handling.trainingDays, [0, null, 5]);
+  assert.deepEqual(b.labor.handling.trainingDays, [0, null, 5, 0, 0, 0, 0, 0]);
   assert.deepEqual(b.prov["labor.handling.trainingDays"], YOURS);
   // Clearing every entry clears the list and its record.
-  b = setInput(setInput(b, "labor.handling.trainingDays.0", null), "labor.handling.trainingDays.2", null);
+  for (const t of [0, 2, 3, 4, 5, 6, 7]) b = setInput(b, `labor.handling.trainingDays.${t}`, null);
   assert.equal(b.labor.handling.trainingDays, null);
   assert.equal("labor.handling.trainingDays" in b.prov, false);
-  // An entry past the end extends the list: the years in between keep the last value they carried (9.2); an entry of
-  // a field that holds no list yet starts one, with blanks before it.
+  // Typing one year of a short list keeps every other year at the value it carried (9.2), through T; an entry of a
+  // field that holds no list yet starts one, with blanks before it.
   const a = deepFreeze(loadExample("ranchA"));
   const extended = setInput(setInput(a, "labor.added.0.hours", [30, 10]), "labor.added.0.hours.4", 20);
-  assert.deepEqual(extended.labor.added[0].hours, [30, 10, 10, 10, 20]);
+  assert.deepEqual(extended.labor.added[0].hours, [30, 10, 10, 10, 20, 10, 10, 10, 10, 10, 10]);
   assert.deepEqual(extended.prov["labor.added.0.hours"], YOURS);
   const herd = setInput(setInput(a, "classes.cows.head", [900, 900]), "classes.cows.head.4", 950);
-  assert.deepEqual(herd.classes.cows.head, [900, 900, 900, 900, 950]);
+  assert.deepEqual(herd.classes.cows.head, [900, 900, 900, 900, 950, 900, 900, 900, 900, 900, 900]);
   assert.ok(!analyze(herd).notices.some((n) => n.type === "noCattle"));
   const c = deepFreeze(loadExample("ranchC"));
   const started = setInput(c, "labor.cut.unitsCut.1", 3);
@@ -504,7 +512,289 @@ test("every action leaves the state it is given unchanged, and returns it when n
       setInput(a, path, null);
     }
     removeItem(a, "labor.added", 0);
+    removeKey(a, "costs", Object.keys(a.costs)[0]);
+    addPart(a, "classes", "bulls");
+    setShare(a, "costs.subscription.operatorShare", "u1", 0.5);
+    setPricing(a, "purchased");
+    setInstall(a, 0, 40);
+    for (const f of formFields(a).filter((x) => x.byYear)) toFlat(toByYear(a, f.path), f.path);
     assert.deepEqual(a, before, id);
     assert.equal(reset(a).example, id);
   }
+});
+
+// ---------------------------------------------------------------- the actions the page switch adds (9.1 step 6)
+
+test("removeKey: removing a cost line, a class or a served class from an example as loaded makes it the user's own (9.5 item 5)", () => {
+  const A = deepFreeze(loadExample("ranchA"));
+  for (const [path, key] of [["costs", "mounting"], ["classes", "cows"], ["served", "cows"]]) {
+    const r = removeKey(A, path, key);
+    assert.equal(r[path][key], undefined, `${path}.${key}`);
+    assert.deepEqual(flags(r), { own: true, reviewed: false }, `${path}.${key}`);
+    assert.ok(!Object.keys(r.prov).some((k) => k.startsWith(`${path}.${key}.`)), `${path}.${key}`);
+  }
+  assert.equal(removeKey(A, "costs", "collars"), A);
+});
+
+test("toByYear and toFlat: 'By year' and 'Same value every year' change the layout, not the numbers, the records or the flags", () => {
+  for (const id of EXAMPLE_IDS) {
+    const a = deepFreeze(loadExample(id)), r = analyze(a);
+    for (const f of formFields(a).filter((x) => x.byYear && typeof getAt(a, x.path) === "number")) {
+      const years = toByYear(a, f.path), v = getAt(years, f.path);
+      assert.ok(Array.isArray(v) && v.length === a.settings.T + 1, `${id} ${f.path}`);
+      assert.deepEqual(validate(years), [], `${id} ${f.path}`);
+      const y = analyze(years);
+      assert.deepEqual([y.cashNPV, y.economicNPV, y.hours.freed], [r.cashNPV, r.economicNPV, r.hours.freed], `${id} ${f.path}`);
+      assert.deepEqual([years.prov, flags(years)], [a.prov, flags(a)], `${id} ${f.path}`);
+      // And back: the single number again, as loaded.
+      assert.deepEqual(toFlat(years, f.path), a, `${id} ${f.path}`);
+    }
+  }
+  // A single number of added hours holds only in the operating years s+1..T (9.3), so its list has 0 in years 0..s.
+  const A = loadExample("ranchA");
+  assert.deepEqual(getAt(toByYear(A, "labor.added.1.hours"), "labor.added.1.hours"), [0, ...Array(10).fill(52)]);
+  // So do the units of paid labor cut (9.3 Labor counts them in the operating years only).
+  assert.deepEqual(getAt(toByYear(A, "labor.cut.unitsCut"), "labor.cut.unitsCut"), [0, ...Array(10).fill(16)]);
+  // A list whose years differ becomes one number by the user's change: [D], and the analysis is the user's own.
+  // Ranch D trains its herd once: 7 days in year 1 only, which one number cannot hold.
+  const D = loadExample("ranchD");
+  assert.deepEqual(getAt(D, "labor.handling.trainingDays"), [0, 7, 0]);
+  const flat = toFlat(D, "labor.handling.trainingDays");
+  assert.equal(getAt(flat, "labor.handling.trainingDays"), 7);
+  assert.deepEqual([flat.prov["labor.handling.trainingDays"], flags(flat)], [YOURS, { own: true, reviewed: false }]);
+  // Training days as one number hold in the operating years only (9.3), so By year gives 0 in year 0 and the same
+  // economic NPV.
+  const back = toByYear(flat, "labor.handling.trainingDays");
+  assert.deepEqual(getAt(back, "labor.handling.trainingDays"), [0, 7, 7, 7, 7, 7, 7, 7]);
+  assert.deepEqual([validate(back), analyze(back).economicNPV], [[], analyze(flat).economicNPV]);
+  // A list already, a blank, or a path with no number: unchanged.
+  assert.equal(toByYear(D, "labor.handling.trainingDays"), D);
+  assert.equal(toByYear(setInput(D, "labor.cut.unitsCut", null), "labor.cut.unitsCut").labor.cut.unitsCut, null);
+  assert.equal(toFlat(A, "classes.cows.head"), A);
+});
+
+test("setInstall: water's install hours sit in the start year's entry with 0 in the other years; a new start year moves them (9.4)", () => {
+  const A = deepFreeze(loadExample("ranchA"));
+  assert.deepEqual([isInstall(A, 0), isInstall(A, 1), installHours(A, A.labor.added[0].hours)], [true, false, 30]);
+  const forty = setInstall(A, 0, 40);
+  assert.deepEqual(forty.labor.added[0].hours, [40, 0]);
+  assert.deepEqual([forty.prov["labor.added.0.hours"], flags(forty)], [YOURS, { own: true, reviewed: false }]);
+  close(analyze(forty).hours.freed[0], -40, 1e-9);
+  // Start year 2: the 40 h move to year 2, and no year before or after holds install hours.
+  const later = setInput(forty, "startYear", 2);
+  assert.deepEqual(later.labor.added[0].hours, [0, 0, 40, 0]);
+  assert.deepEqual(later.prov["labor.added.0.hours"], YOURS);
+  assert.equal(installHours(later, later.labor.added[0].hours), 40);
+  assert.deepEqual(validate(later), []);
+  // Typed again with start year 2, it stays in year 2.
+  assert.deepEqual(setInstall(later, 0, 25).labor.added[0].hours, [0, 0, 25, 0]);
+  // Cleared: blank, with no record.
+  const cleared = setInstall(A, 0, null);
+  assert.equal(cleared.labor.added[0].hours, null);
+  assert.equal("labor.added.0.hours" in cleared.prov, false);
+  // The example's record stays when only the start year moves the hours.
+  const moved = setInput(A, "startYear", 1);
+  assert.deepEqual([moved.labor.added[0].hours, moved.prov["labor.added.0.hours"]], [[0, 30, 0], A.prov["labor.added.0.hours"]]);
+});
+
+test("setInstall: a start year that is not a whole year before T builds no install list; the hours wait and then move (9.2, 9.4)", () => {
+  const A = deepFreeze(loadExample("ranchA"));
+  // A calendar year, or a huge start year: an error, and the hours stay as they were (no list of thousands of years).
+  // While they wait, the start year's error is the only one: the install time is not blamed for it.
+  for (const s of [2026, 1e7, 1e10, 10, 12, 2.5]) {
+    const b = setInput(A, "startYear", s);
+    assert.deepEqual(b.labor.added[0].hours, A.labor.added[0].hours, String(s));
+    assert.deepEqual(validate(b).map((e) => e.path), ["startYear"], String(s));
+  }
+  // Install time typed while the start year is 2.5: kept in entry 0, then moved when the start year is corrected.
+  const typed = setInstall(setInput(A, "startYear", 2.5), 0, 40);
+  assert.deepEqual(typed.labor.added[0].hours, [40, 0]);
+  const fixed = setInput(typed, "startYear", 2);
+  assert.deepEqual(fixed.labor.added[0].hours, [0, 0, 40, 0]);
+  assert.deepEqual(validate(fixed), []);
+  // A start year past T waits for the horizon: raising T to cover it moves the hours.
+  const past = setInput(setInput(A, "settings.T", 5), "startYear", 7);
+  assert.deepEqual(past.labor.added[0].hours, [30, 0]);
+  const longer = setInput(past, "settings.T", 9);
+  assert.deepEqual(longer.labor.added[0].hours, [0, 0, 0, 0, 0, 0, 0, 30, 0]);
+  assert.deepEqual(validate(longer), []);
+});
+
+test("An added item renamed install: hours typed as one number become its install time, so the page shows what the engine counts (9.4)", () => {
+  const base = loadExample("ranchA");
+  base.labor.added = [base.labor.added[1]];
+  deepFreeze(base);
+  const add = (a) => addItem(a, "labor.added", newItem(a, "labor.added"));
+  const finish = (a) => setInput(setInput(setInput(a, "labor.added.1.doneBy", "paid"), "labor.added.1.paidRate", 25), "labor.added.1.loadPct", 0);
+  // Name first, then install time; and install time first (typed as hours), then the name.
+  const nameFirst = finish(setInstall(setInput(add(base), "labor.added.1.label", "install"), 1, 30));
+  const hoursFirst = finish(setInput(setInput(add(base), "labor.added.1.hours", 30), "labor.added.1.label", "install"));
+  assert.deepEqual([nameFirst.labor.added[1].hours, hoursFirst.labor.added[1].hours], [[30, 0], [30, 0]]);
+  assert.equal(analyze(hoursFirst).cashNPV, analyze(nameFirst).cashNPV);
+  // With start year 2, both orders put the 30 h in year 2, the install year, and neither raises an error.
+  const at2First = finish(setInstall(setInput(add(setInput(base, "startYear", 2)), "labor.added.1.label", "install"), 1, 30));
+  const at2Hours = finish(setInput(setInput(add(setInput(base, "startYear", 2)), "labor.added.1.hours", 30), "labor.added.1.label", "install"));
+  assert.deepEqual([at2First.labor.added[1].hours, at2Hours.labor.added[1].hours], [[0, 0, 30, 0], [0, 0, 30, 0]]);
+  assert.equal(cash(at2Hours), cash(at2First));
+  // Hours by year that are not install-shaped stay as they are, and the page shows them by year.
+  const byYear = setInput(setInput(setInput(add(base), "labor.added.1.hours.1", 30), "labor.added.1.hours.2", 10), "labor.added.1.label", "install");
+  assert.deepEqual(byYear.labor.added[1].hours.slice(0, 3), [null, 30, 10]);
+  // Install-shaped: blank, or the list the page writes for an install time, the hours in the start year's entry (entry 0
+  // while the start year is an error) and 0 in the next. A list by year, or one with hours in two years, is not.
+  const at2 = setInput(base, "startYear", 2), bad = setInput(base, "startYear", 2.5);
+  assert.deepEqual([installShaped(byYear, byYear.labor.added[1].hours), installShaped(base, [30, 0]), installShaped(base, [0, 0, 30, 0]),
+    installShaped(at2, [0, 0, 30, 0]), installShaped(bad, [0, 0, 30, 0]), installShaped(bad, [30, 0]), installShaped(base, [30]),
+    installShaped(base, 30), installShaped(base, null), installShaped(base, [30, 10]), installShaped(base, [30, 10, 0]),
+    installShaped(base, [30, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])],
+  [false, true, false, true, false, true, false, false, true, false, false, false]);
+  const hours = formFields(byYear).find((f) => f.path === "labor.added.1.hours");
+  assert.deepEqual([hours.install, hours.byYear, hours.help], [undefined, true, undefined]);
+  // One number from a hand-made link counts every operating year, and the page says so where it shows it.
+  const one = structuredClone(base);
+  one.labor.added = [{ ...one.labor.added[0], label: "install", hours: 30 }];
+  assert.deepEqual(formFields(one).filter((f) => f.path === "labor.added.0.hours").map((f) => [f.byYear, f.help]), [[true, INSTALL_EVERY_YEAR]]);
+});
+
+test("A new horizon or start year moves an install time, and leaves install hours entered by year as they are (9.4)", () => {
+  const base = loadExample("ranchA");
+  base.labor.added = [base.labor.added[1]];
+  deepFreeze(base);
+  const add = (a) => addItem(a, "labor.added", newItem(a, "labor.added"));
+  const finish = (a) => setInput(setInput(setInput(a, "labor.added.1.doneBy", "paid"), "labor.added.1.paidRate", 25), "labor.added.1.loadPct", 0);
+  // Hours typed by year in years 1 and 2, then named install: a horizon there and back, and a start-year change, keep them.
+  const byYear = finish(setInput(setInput(setInput(add(base), "labor.added.1.hours.1", 30), "labor.added.1.hours.2", 10), "labor.added.1.label", "install"));
+  const typed = byYear.labor.added[1].hours;
+  const round = setInput(setInput(byYear, "settings.T", 12), "settings.T", 10);
+  assert.deepEqual(round.labor.added[1].hours.slice(0, typed.length), typed);
+  assert.equal(analyze(round).cashNPV, analyze(byYear).cashNPV);
+  assert.deepEqual(setInput(byYear, "startYear", 1).labor.added[1].hours, typed);
+  // Hours in year 3 typed under another name, then renamed install: also kept.
+  const later = setInput(setInput(setInput(add(base), "labor.added.1.label", "setup"), "labor.added.1.hours.3", 10), "labor.added.1.label", "install");
+  assert.deepEqual(setInput(later, "settings.T", 12).labor.added[1].hours, later.labor.added[1].hours);
+  // An install time still moves with the start year, and stays put when only the horizon changes.
+  const installed = setInstall(setInput(add(base), "labor.added.1.label", "install"), 1, 30);
+  assert.deepEqual(setInput(installed, "startYear", 2).labor.added[1].hours, [0, 0, 30, 0]);
+  assert.deepEqual(setInput(installed, "settings.T", 12).labor.added[1].hours, [30, 0]);
+  // Hours typed by year in year 1 only, then named install: a start year or horizon that is briefly an error (a calendar
+  // year, a start year past T, T 0), or a valid start year of 1, and back, leave them where they were typed.
+  const year1 = [0, 30, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  const one = finish(setInput(setInput(add(base), "labor.added.1.hours", year1), "labor.added.1.label", "install"));
+  assert.deepEqual(one.labor.added[1].hours, year1);
+  assert.equal(formFields(one).find((f) => f.path === "labor.added.1.hours").install, undefined);
+  for (const [path, away, back] of [["startYear", 2026, 0], ["startYear", 12, 0], ["startYear", 1, 0], ["settings.T", 0, 10]]) {
+    const there = setInput(one, path, away), again = setInput(there, path, back);
+    assert.deepEqual(again.labor.added[1].hours, one.labor.added[1].hours, `${path} ${away}`);
+    assert.deepEqual([cash(again), analyze(again).economicNPV], [cash(one), analyze(one).economicNPV], `${path} ${away}`);
+  }
+  // An install time waits in entry 0 while the start year is an error, shown as one value, and moves back after.
+  const at3 = setInput(installed, "startYear", 3);
+  assert.deepEqual(at3.labor.added[1].hours, [0, 0, 0, 30, 0]);
+  const waiting = setInput(at3, "startYear", 2026);
+  assert.deepEqual(waiting.labor.added[1].hours, [30, 0]);
+  assert.equal(formFields(waiting).find((f) => f.path === "labor.added.1.hours").install, 1);
+  assert.deepEqual(setInput(waiting, "startYear", 3).labor.added[1].hours, [0, 0, 0, 30, 0]);
+});
+
+test("A per-year list is filled through year T, and never past MAX_YEARS: a corrected horizon keeps the link readable (9.2)", () => {
+  const D = deepFreeze(loadExample("ranchD"));
+  const long = setInput(setInput(D, "settings.T", 60), "labor.handling.trainingDays.1", 5);
+  assert.equal(long.labor.handling.trainingDays.length, MAX_YEARS + 1);
+  assert.equal(getAt(toByYear(setInput(long, "labor.cut.unitsCut", 2), "labor.cut.unitsCut"), "labor.cut.unitsCut").length, MAX_YEARS + 1);
+  const back = setInput(long, "settings.T", 7);
+  assert.deepEqual(validate(back), []);
+  const read = readLink("#" + writeLink(back));
+  assert.equal(read.kind, "v2");
+  assert.deepEqual(analyze(read.state).cashNPV, analyze(back).cashNPV);
+  // A horizon that is not a whole number shows years 0..2 for T 2.5, and the form and the EID classes still build.
+  const A = loadExample("ranchA"), C = loadExample("ranchC");
+  assert.equal(getAt(toByYear(setInput(A, "settings.T", 2.5), "classes.cows.head"), "classes.cows.head").length, 3);
+  assert.equal(formGroups(setInput(C, "settings.T", 2.5)).length, formGroups(C).length);
+  assert.deepEqual(eidRuleClasses(setInput(C, "settings.T", 2.5)), ["cows", "calvesBorn"]);
+  // A huge horizon shows no more than MAX_YEARS + 1 years.
+  const byYear = toByYear(A, "classes.cows.head");
+  const huge = { ...byYear, settings: { ...byYear.settings, T: 1e10 } };
+  assert.equal(shownValue(huge, formFields(huge).find((f) => f.path === "classes.cows.head")).length, MAX_YEARS + 1);
+});
+
+test("By year on an input that counts only in operating years waits for a start year before T (9.3 Timing)", () => {
+  const A = deepFreeze(loadExample("ranchA"));
+  // Start year 10 with T 10 is an error: By year on the labor cut changes nothing, so no year is stored as 0.
+  const bad = setInput(A, "startYear", 10);
+  assert.deepEqual([byYearReady(bad, "labor.cut.unitsCut"), byYearReady(bad, "labor.added.1.hours"), byYearReady(bad, "costs.mounting.unitCost")],
+    [false, false, true]);
+  assert.equal(toByYear(bad, "labor.cut.unitsCut"), bad);
+  const back = setInput(toByYear(bad, "labor.cut.unitsCut"), "startYear", 0);
+  assert.equal(cash(back), cash(A));
+  assert.deepEqual(back.prov["labor.cut.unitsCut"], A.prov["labor.cut.unitsCut"]);
+  assert.equal(byYearReady(A, "labor.cut.unitsCut"), true);
+});
+
+test("setShare: one land unit's share keeps the others' share when the line held one for every unit (9.4 Shared)", () => {
+  const a = loadExample("ranchA");
+  a.settings.landUnits = [{ id: "u1", kind: "owned", share: 0.6 }, { id: "u2", kind: "owned", share: 0.4 }];
+  a.costs.subscription.operatorShare = 0.8;
+  deepFreeze(a);
+  const split = setShare(a, "costs.subscription.operatorShare", "u2", 0.5);
+  assert.deepEqual(split.costs.subscription.operatorShare, { u1: 0.8, u2: 0.5 });
+  assert.deepEqual([split.prov["costs.subscription.operatorShare.u1"], split.prov["costs.subscription.operatorShare.u2"]], [YOURS, YOURS]);
+  assert.equal("costs.subscription.operatorShare" in split.prov, false);
+  // A share already split by unit: only that unit's changes.
+  assert.deepEqual(setShare(split, "costs.subscription.operatorShare", "u1", 1).costs.subscription.operatorShare, { u1: 1, u2: 0.5 });
+  // No unit id: the line's one share.
+  assert.equal(setShare(a, "costs.subscription.operatorShare", null, 0.3).costs.subscription.operatorShare, 0.3);
+  // With no share stored, only the typed unit's is written; the others keep the land units' default.
+  assert.deepEqual(setShare(a, "benefitShares.vehicle", "u1", 0.5).benefitShares.vehicle, { u1: 0.5 });
+  assert.deepEqual(flags(split), { own: true, reviewed: false });
+  // Land-unit ids made of digits (a link may carry them) still key an object, never a list, and the link reads back.
+  const digits = structuredClone(a);
+  digits.settings.landUnits = [{ id: "1", kind: "owned", share: 0.6 }, { id: "2", kind: "owned", share: 0.4 }];
+  delete digits.costs.subscription.operatorShare;
+  const two = setShare(setShare(digits, "costs.subscription.operatorShare", "2", 0.3), "costs.subscription.operatorShare", "1", 0.9);
+  assert.deepEqual(two.costs.subscription.operatorShare, { 1: 0.9, 2: 0.3 });
+  assert.ok(!Array.isArray(two.costs.subscription.operatorShare));
+  assert.deepEqual([two.prov["costs.subscription.operatorShare.1"], two.prov["costs.subscription.operatorShare.2"]], [YOURS, YOURS]);
+  assert.deepEqual(setShare(digits, "benefitShares.vehicle", "2", 0.5).benefitShares.vehicle, { 2: 0.5 });
+  assert.deepEqual(validate(two), []);
+  assert.equal(readLink("#" + writeLink(two)).kind, "v2");
+});
+
+test("setPricing: purchased collars add their lines blank, each 'Quote required'; leased adds the subscription only if missing (9.4)", () => {
+  const B = deepFreeze(loadExample("ranchB"));
+  const bought = setPricing(B, "purchased");
+  assert.equal(bought.vf.pricing, "purchased");
+  assert.deepEqual([bought.costs.collars, bought.costs.serviceFee], [LINE_TEMPLATES.vf.collars, LINE_TEMPLATES.vf.serviceFee]);
+  assert.equal(bought.costs.collars.unitCost, null);
+  assert.deepEqual([validate(bought), flags(bought)], [[], { own: true, reviewed: false }]);
+  const notices = analyze(bought).notices.filter((n) => n.type === "quoteRequired").map((n) => n.lineId);
+  assert.ok(notices.includes("collars") && notices.includes("serviceFee"), JSON.stringify(notices));
+  // Back to leased: the subscription is still there, unchanged.
+  assert.deepEqual(setPricing(bought, "leased").costs.subscription, B.costs.subscription);
+});
+
+test("addPart: a class, an enrolled or served class, or a cost line, with what a new one holds; anything else is unchanged", () => {
+  const B = deepFreeze(loadExample("ranchB"));
+  assert.deepEqual(addPart(B, "classes", "bulls").classes.bulls, { head: 0 });
+  assert.deepEqual(addPart(B, "enrolled", "cows").enrolled.cows, { head: 0, months: 12 });
+  assert.deepEqual(addPart(loadExample("ranchA"), "served", "bulls").served.bulls, { months: 12 });
+  const base = addPart(B, "costs", "baseStations");
+  assert.deepEqual(base.costs.baseStations, LINE_TEMPLATES.vf.baseStations);
+  assert.deepEqual(flags(base), { own: true, reviewed: false });
+  assert.equal(addPart(B, "costs", "reader"), B); // not a virtual fence line
+  assert.equal(addPart(B, "classes", "yearlings"), B); // already there
+  assert.equal(addPart(B, "riskLines", "x"), B);
+  assert.deepEqual(addPart(B, "classes", "bulls"), addKey(B, "classes", "bulls", { head: 0 }));
+});
+
+test("removeItem: removing the land unit the fence is on deletes the fence's unit and its record (9.2)", () => {
+  const D = loadExample("ranchD");
+  D.settings.landUnits = [{ id: "u1", kind: "owned", share: 0.5 }, { id: "u2", kind: "owned", share: 0.5 }];
+  D.vf.fence.landUnitId = "u2";
+  D.prov["vf.fence.landUnitId"] = YOURS;
+  deepFreeze(D);
+  const one = removeItem(D, "settings.landUnits", 1);
+  assert.equal(one.vf.fence.landUnitId, undefined);
+  assert.equal("vf.fence.landUnitId" in one.prov, false);
+  assert.ok(!validate(one).some((e) => e.path === "vf.fence.landUnitId"));
+  // Removing another unit keeps it.
+  assert.equal(removeItem(D, "settings.landUnits", 0).vf.fence.landUnitId, "u2");
 });
