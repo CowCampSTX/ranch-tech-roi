@@ -28,7 +28,7 @@ const sum2 = (xs) => xs.reduce((x, y) => x + y, 0);
 
 // ---------------------------------------------------------------- hand check (9.1 step 2, 9.7 Hand checks)
 
-test("today's hand-checked case rebuilt as line items gives the same NPV, IRR and payback", () => {
+test("version 1's hand-checked case rebuilt as line items gives the same NPV, IRR and payback", () => {
   const a = analysis(3, 0.1, {
     costs: {
       hardware: { label: "Hardware", timing: "capital", basis: "fixed", unitCost: 1000, lifeYears: null },
@@ -424,7 +424,7 @@ test("cost-line rules: life, start years, commitment years and residuals (9.2)",
   const a = (line, more = {}) => analysis(10, 0.07, { costs: { devices: line }, ...more });
   // An entered life must be a whole number of years, 1 or more; blank is one purchase.
   assert.deepEqual(errorsAt(a(device({ lifeYears: 2.5 })), "costs.devices.lifeYears"),
-    [{ path: "costs.devices.lifeYears", label: "Life", message: YEARS_MESSAGE }]);
+    [{ path: "costs.devices.lifeYears", label: "Life (Devices)", message: YEARS_MESSAGE }]);
   assert.equal(errorsAt(a(device({ lifeYears: 0 })), "costs.devices.lifeYears").length, 1);
   assert.deepEqual(validate(a(device({ lifeYears: null }))), []);
   assert.deepEqual(validate(a(device({ lifeYears: 4 }))), []);
@@ -1267,7 +1267,7 @@ test("water care by the landlord: the lines that value water runs default to ope
 test("land-unit, operator-share and fence rules (9.2)", () => {
   const units = [owned("home", 0.6), leased("lease", 2.5, 0.4)];
   const term = errorsAt(onLand(5, units), "settings.landUnits.1.leaseYears");
-  assert.deepEqual(term.map((e) => [e.label, e.message]), [["Lease term", YEARS_MESSAGE]]);
+  assert.deepEqual(term.map((e) => [e.label, e.message]), [["Lease term on land unit 2", YEARS_MESSAGE]]);
   assert.deepEqual(validate(onLand(5, [owned("home", 0.6), leased("lease", 3, 0.4)])), []); // an owned unit needs no term
   const sum90 = errorsAt(onLand(5, [owned("home", 0.6), leased("lease", 3, 0.3)]), "settings.landUnits");
   assert.deepEqual(sum90.map((e) => e.message), ["Land units: the shares add up to 90%; they must add up to 100%."]);

@@ -5,7 +5,8 @@
 // with the modules, the water-block warnings, the EID rule notice (B4a), the price labels (9.5 item 4) and the
 // examples' banners (9.5 item 5); the input labels and link banners (B8, 9.5 items 8 and 11); and the payback-target
 // line, the "It would pay" sentence and the "What would make it pay" panel (B9, 9.5 items 1 and 9).
-import { addedHoursInput, buildLines, CLASS_NAMES, LINE_LABELS, lineLabel as lineName, own, priceUnit, rankDrivers } from "./roi.js";
+import { addedHours, addedHoursInput, addedName, at, buildLines, CLASS_NAMES, landUnitsOf, lastShownYear, LINE_LABELS, lineLabel as lineName, operatorShare, own,
+  priceUnit, rankDrivers, shareUsed } from "./roi.js";
 import { EXAMPLE_NAMES } from "./examples.js";
 import { V1_FIELDS } from "./v1.js";
 
@@ -278,7 +279,9 @@ export function priceLabel(prov) {
   if (prov.placeholder) return "Synthetic placeholder, not a price. Replace with your quote.";
   if (prov.cls === "D") return "your quote";
   if (prov.cls !== "C") return null;
-  const cite = `${prov.src}, ${prov.pub}`;
+  // A vendor is named only in a linked citation (owner rule): a record whose link is missing or not a web page (a
+  // hand-made link can carry one) names no source.
+  const cite = safeUrl(prov.url) ? `${prov.src}, ${prov.pub}` : "source link missing";
   if (prov.reported) return `Vendor information: reported price (${cite}), not a published list price. Not an endorsement. Replace with your quote.`;
   // A version 1 link's copy of a published price notes where it came from; the label shows only the price part, "(10
   // monitors × $1,490)" (9.5 item 8, 10.1 row 30).
@@ -378,7 +381,8 @@ export function inputInfo(a, path) {
   }
   if (m(/^served\.(\w+)\.months(\.\d+)?$/)) return { label: "Classes served and months on the served pastures", unit: "months" };
   if (m(/^labor\.cut\.unitsCut(\.\d+)?$/)) {
-    return { label: UNITS_CUT_LABELS[a.module] ?? "Hired labor cut", unit: LABOR_UNITS[a.labor?.cut?.laborUnit] ?? "hours" };
+    // No unit until "Paid labor is cut in" is chosen (9.2 gives it no default).
+    return { label: UNITS_CUT_LABELS[a.module] ?? "Hired labor cut", unit: LABOR_UNITS[a.labor?.cut?.laborUnit] ?? "" };
   }
   if ((x = m(/^labor\.cut\.(hoursPerUnit|paidRate|salary|loadPct)$/))) {
     return { label: { hoursPerUnit: "Hours per unit", paidRate: "Pay rate", salary: "Salary", loadPct: "Payroll load" }[x[1]],
@@ -390,7 +394,7 @@ export function inputInfo(a, path) {
   }
   if ((x = m(/^labor\.added\.(\d+)\.(hours|paidRate|loadPct)(\.\d+)?$/))) {
     if (x[2] === "hours") return addedHoursInput(a, Number(x[1]));
-    const name = a.labor?.added?.[Number(x[1])]?.label ?? `added item ${Number(x[1]) + 1}`;
+    const name = addedName(a, Number(x[1]));
     const [label, unit] = { paidRate: ["Pay rate", "$/h"], loadPct: ["Payroll load", "%"] }[x[2]];
     return { label: `${label} (${name})`, unit };
   }
@@ -412,6 +416,7 @@ export function inputInfo(a, path) {
     return { label: `Residual (${lineName(a, x[1])})`, unit: x[2] === "pct" ? "%" : "$" };
   }
   if ((x = m(/^costs\.([^.]+)\.operatorShare(\.[^.]+)?$/))) return { label: `Who pays for this? (${lineName(a, x[1])})`, unit: "%" };
+  if (path === "costs.baseStations.qty") return { label: "Number of base stations", unit: "" };
   if ((x = m(/^costs\.([^.]+)\.(\w+)(\.\d+)?$/)) && COST_FIELDS[x[2]]) {
     return { label: `${COST_FIELDS[x[2]][0]} (${lineName(a, x[1])})`, unit: COST_FIELDS[x[2]][1] };
   }
@@ -435,7 +440,50 @@ export function inputInfo(a, path) {
     const [label, unit] = FIELD_SETS[x[1]][x[2]];
     return { label, unit };
   }
+  const word = choiceLabel(a, path);
+  if (word) return { label: word, unit: "" };
   return { label: path, unit: "" };
+}
+
+/** The labels of the inputs that take a choice, a yes or no, a name or a list of classes (9.4), or null. */
+function choiceLabel(a, path) {
+  let x;
+  const m = (re) => path.match(re);
+  const fixed = {
+    "settings.opType": "Operation type", "labor.freedTimeUse": "What happens to the freed time", "labor.cut.laborUnit": "Paid labor is cut in",
+    "labor.handling.doneBy": "Handling done by", "vf.pricing": "Pricing model", "vf.fence.mode": "Avoided or deferred",
+    "vf.fence.landUnitId": "Land unit the fence is on", "vf.validatedAlert": "Validated alert function",
+    "eid.premium.quoteNote": "Buyer quote note", "eid.freeTags.years": "Free-tag billing years", "production.classes": "Classes sold",
+    "production.fromRecords": "Weight gain from your own records", "production.sourceNote": "Source note (weight gain)",
+    "water.fewerChecksLoss.class": "Class (Losses from fewer physical checks)",
+  };
+  if (Object.hasOwn(fixed, path)) return fixed[path];
+  if ((x = m(/^settings\.landUnits\.(\d+)\.(\w+)$/))) {
+    const label = { kind: "Owned or leased", renewalExpected: "Renewal expected", fenceBuiltBy: "Who builds the fence",
+      fenceMaintainedBy: "Who maintains the fence", waterBy: "Who provides and checks the water",
+      careInLeaseRate: "Water care is in the lease rate", id: "Id" }[x[2]];
+    return label ? `${label} on land unit ${Number(x[1]) + 1}` : null;
+  }
+  if ((x = m(/^labor\.added\.(\d+)\.(doneBy|label)$/))) {
+    const name = addedName(a, Number(x[1]));
+    return x[2] === "doneBy" ? `Done by (${name})` : `Name (added item ${Number(x[1]) + 1})`;
+  }
+  if ((x = m(/^labor\.handling\.events\.(\d+)\.(classes|label)$/))) {
+    const name = a.labor?.handling?.events?.[Number(x[1])]?.label ?? `event ${Number(x[1]) + 1}`;
+    return x[2] === "classes" ? `Classes (${name})` : `Name (event ${Number(x[1]) + 1})`;
+  }
+  if ((x = m(/^costs\.([^.]+)\.(timing|basis|billing|classes|staysWithLand|residual\.mode)$/))) {
+    const label = { timing: "Bought or billed each season", basis: "Billing basis", billing: "Billing", classes: "Classes",
+      staysWithLand: "Stays with the land when a lease ends", "residual.mode": "Residual" }[x[2]];
+    return `${label} (${lineName(a, x[1])})`;
+  }
+  if ((x = m(/^riskLines\.(\d+)\.(cause|class)$/))) return `${x[2] === "cause" ? "Cause" : "Class"} (${lineName(a, `risk:${x[1]}`)})`;
+  if ((x = m(/^water\.blocks\.(\d+)\.(name|freezeOrFeedRoute)$/))) {
+    if (x[2] === "name") return `Name (block ${Number(x[1]) + 1})`;
+    return `Tanks freeze / water checked on the feeding route (${a.water?.blocks?.[Number(x[1])]?.name ?? `block ${Number(x[1]) + 1}`})`;
+  }
+  if ((x = m(/^eid\.ruleApplies\.(\w+)$/))) return `Does the EID rule apply to cattle you move? (${className(x[1])})`;
+  return null;
 }
 
 // ---------------------------------------------------------------- link banners (9.5 items 8 and 11)
@@ -668,4 +716,620 @@ export function gridNote(g) {
   if (g.rows.clipped || g.cols.clipped) parts.push("A value that is not valid with your other inputs is moved to the nearest one that is.");
   if (g.cells.some((row) => row.includes(null))) parts.push("A cell marked n/a pairs values that are not valid together.");
   return parts.join(" ");
+}
+
+// ---------------------------------------------------------------- the page: year table, left out, chart and formulas (9.5 items 3, 4 and 10)
+
+const CLASS_ORDER = ["A", "B", "C", "D", "E"];
+
+/** The evidence classes of a line's inputs, from their `prov` records, in the order A to E: its badge (9.5 item 3). */
+export function lineClasses(a, line) {
+  const found = new Set((line.paths ?? []).map((p) => a.prov?.[p]?.cls).filter(Boolean));
+  return CLASS_ORDER.filter((c) => found.has(c));
+}
+
+/** The note above the year table (9.5 item 3), with the analysis's real rate. */
+export function yearTableNote(r) {
+  return "Year 0 is the start. Fees billed in advance, such as a subscription, are paid at the start of the season they "
+    + "cover, so the first season's fee is in year 0. Purchases, and fence the technology avoids, fall in the year of "
+    + "purchase; other costs and every benefit fall at the end of their year. Money in today's US dollars, discounted at "
+    + `${quantity(r.rate * 100)}% a year (real). Your share of each line, before tax.`;
+}
+
+/** "Quote required: not counted", as the year table and the list of what was left out name a blank price (9.5 item 7). */
+export const QUOTE_REQUIRED = "Quote required: not counted";
+export const QUOTE_WARNING = "Costs marked 'Quote required' are left out, so this result overstates the case.";
+export const BLANK_BENEFITS = "Benefits left blank are not counted, so they can only make this result look worse.";
+
+/**
+ * The year table (9.5 item 3): years 0..T down the rows; a column for each cost line and each cash benefit line, with
+ * the evidence classes of its inputs; then the residual value, total cost, total cash benefit, net cash, cumulative and
+ * discounted net cash; the risk lines after them, with their own subtotal, never added to net cash; and the capacity
+ * hours, in hours. Costs show as amounts paid. Each row carries the cattle-presence message of its year, if any.
+ */
+export function yearTable(a, r) {
+  const quote = new Set(r.notices.filter((n) => n.type === "quoteRequired").map((n) => n.lineId));
+  const costs = r.lines.filter((l) => l.kind === "cost");
+  const cash = r.lines.filter((l) => l.kind === "cash");
+  const risk = r.lines.filter((l) => l.kind === "risk" && !l.missing);
+  const freed = r.lines.find((l) => l.id === "hoursFreed")?.operatorClaims ?? r.hours.freed;
+  const line = (l, group) => ({ label: l.label, group, classes: lineClasses(a, l), note: quote.has(l.id) ? QUOTE_REQUIRED : null });
+  const columns = [
+    { label: "Year", group: "year" },
+    ...costs.map((l) => line(l, "cost")),
+    ...cash.map((l) => line(l, "benefit")),
+    ...["Residual value", "Total cost", "Total cash benefit", "Net cash", "Cumulative", "Discounted"].map((label) => ({ label, group: "total" })),
+    ...risk.map((l) => line(l, "risk")),
+    ...(risk.length ? [{ label: "Expected losses avoided (not in net cash)", group: "risk" }] : []),
+    { label: "Hours freed", group: "hours" },
+  ];
+  const noCattle = new Set(r.notices.filter((n) => n.type === "noCattle").map((n) => n.year));
+  let cumulative = 0;
+  const rows = r.years.map((t) => {
+    cumulative += r.N[t];
+    return {
+      year: t,
+      cells: [String(t), ...costs.map((l) => money(l.series[t])), ...cash.map((l) => money(l.series[t])), money(r.R[t]),
+        money(r.C[t]), money(r.B[t]), money(r.N[t]), money(cumulative), money(r.N[t] / (1 + r.rate) ** t),
+        ...risk.map((l) => money(l.series[t])), ...(risk.length ? [money(r.X[t])] : []), quantity(Math.round(freed[t] ?? 0))],
+      negative: [r.N[t] < -0.005, cumulative < -0.005],
+      note: noCattle.has(t) ? noticeText({ type: "noCattle", year: t }) : null,
+    };
+  });
+  return { note: yearTableNote(r), columns, rows };
+}
+
+const unitName = (a, unitId) => {
+  const i = (a.settings.landUnits ?? []).findIndex((u) => u.id === unitId);
+  return i >= 0 ? `land unit ${i + 1}` : null;
+};
+
+/**
+ * The lists under the year table (9.5 item 3, F6): what others pay ("Paid by others") and receive ("Received by
+ * others"), by line and land unit, each year's amount and the PV. Hours freed that go to others are in hours, with no
+ * PV. Neither list enters any result. Each list is null when it is empty.
+ */
+export function othersLists(a, r) {
+  const label = (id) => r.lines.find((l) => l.id === id)?.label ?? id;
+  const list = (title, items) => (items.length ? {
+    title,
+    columns: ["Line", "Land unit", ...r.years.map((t) => `Year ${t}`), "PV"],
+    rows: items.map((x) => [label(x.lineId), unitName(a, x.unitId) ?? "", ...x.series.map((v) => (x.pv === null ? `${quantity(Math.round(v))} h` : money(v))),
+      x.pv === null ? "n/a (hours)" : money(x.pv)]),
+  } : null);
+  return [list("Paid by others", r.paidByOthers), list("Received by others", r.receivedByOthers)];
+}
+
+/**
+ * What was left out (9.5 items 4 and 7), in the order in which 9.4 lists the inputs: a blank price as "<line>: Quote
+ * required: not counted", unless its line has no quantity in any year; a benefit, risk or production line that counts as
+ * 0 because an input it needs is blank, once, as "<line>: not entered, not counted"; and any other blank input that
+ * counts as 0 in a line buildLines builds, a cost, hours or capacity line included, once, under its own label. The
+ * list ends with the blank-benefits sentence when it names a benefit, risk or production line or input other than
+ * "Losses from fewer physical checks" and "Verification fee" (each lowers the result when entered); a blank cost input
+ * adds no sentence, and a blank price adds the warning instead. A capital line's residual share or amount is one of its
+ * cost inputs; the blank inputs of a line listed as not entered are not listed again unless a cost line counts them as 0
+ * too; a blank owner time rate is listed
+ * only when some year frees or takes hours, and adds the sentence only when the hours freed are worth more than 0.
+ */
+export function leftOut(a, r) {
+  const quote = new Set(r.notices.filter((n) => n.type === "quoteRequired").map((n) => n.lineId));
+  const missing = new Set(r.notices.filter((n) => n.type === "notEntered").map((n) => n.lineId));
+  const found = [];
+  const add = (text, path) => {
+    if (!found.some((x) => x.text === text)) found.push({ text, order: inputOrder(a, path) });
+  };
+  let benefits = false;
+  const blanksOf = (paths) => paths.filter((p) => blankValue(getPath(a, p)) && !OWN_BLANK.some((re) => re.test(p)));
+  // A line counted as not entered is listed once, however many of its inputs are blank, so its blank inputs are not
+  // listed again under another line (9.5 item 4).
+  const behindLine = new Set(r.lines.filter((l) => missing.has(l.id)).flatMap((l) => blanksOf(l.paths ?? [])));
+  // The owner time rate values the hours freed: it is left out only when some year frees or takes hours, and entering
+  // it can only raise the result when the hours freed are worth more than 0 (judgment, spec issue).
+  const freedPV = (r.hours?.freed ?? []).reduce((s, h, t) => s + h / (1 + r.rate) ** t, 0);
+  const freedAny = (r.hours?.freed ?? []).some((h) => Math.abs(h) > 1e-9);
+  for (const l of r.lines) {
+    if (quote.has(l.id)) add(`${l.label}: ${QUOTE_REQUIRED}`, priceOf(l));
+    if (missing.has(l.id)) {
+      // A line listed once sits where the first input that left it blank sits in 9.4.
+      const blanks = blanksOf(l.paths ?? []);
+      add(`${l.label}: not entered, not counted`, firstInOrder(a, blanks.length ? blanks : l.paths ?? []));
+      if (l.id !== "fewerChecks") benefits = true;
+      continue;
+    }
+    // A capital line's residual also rests on its share of cost or its amount (9.3), a cost input.
+    const paths = l.kind === "cost" ? [...new Set([...(l.paths ?? []), ...residualPaths(a, l)])] : l.paths ?? [];
+    for (const path of blanksOf(paths)) {
+      // A cost that counts the input as 0 lists it even so: a cost left out makes the result look better.
+      if (behindLine.has(path) && l.kind !== "cost") continue;
+      if (path === "settings.oppCostPerHour" && !freedAny) continue;
+      add(`${leftLabel(a, path)}: not entered, not counted`, path);
+      if (benefitInput(l, path) && (path !== "settings.oppCostPerHour" || freedPV > 1e-9)) benefits = true;
+    }
+  }
+  // A stable sort: items at the same place in 9.4 keep the order of the lines.
+  const items = found.sort((x, y) => x.order - y.order).map((x) => x.text);
+  return { items, ending: benefits ? BLANK_BENEFITS : null, warning: quote.size ? QUOTE_WARNING : null };
+}
+/** An input's label in what was left out: a class's head names the class, as its field does. */
+function leftLabel(a, path) {
+  const { label, unit } = inputInfo(a, path);
+  return /^classes\.\w+\.head(\.\d+)?$/.test(path) ? `${label} (${unit})` : label;
+}
+const priceOf = (l) => (l.id === "collarLoss" ? "vf.collarLoss.chargePerCollar" : (l.paths ?? []).find((p) => /unitCost$|^eid\.tagPrice$/.test(p)) ?? l.paths?.[0]);
+const firstInOrder = (a, paths) => paths.reduce((best, p) => (best === undefined || inputOrder(a, p) < inputOrder(a, best) ? p : best), undefined);
+
+// The order in which 9.4 lists the inputs (9.5 item 4): the shared inputs, then the module's. Pay and payroll load sort
+// with the labor item they are asked beside (judgment).
+const INSTALL = (a, p) => {
+  const m = p.match(/^labor\.added\.(\d+)\./);
+  return !!m && a.module === "water" && a.labor?.added?.[m[1]]?.label === "install";
+};
+const SHARED_ORDER = [/^settings\.(T|discountRate|paybackTarget|opType|landUnits)(\.|$)/, /\.operatorShare(\.|$)|^(costShares|benefitShares)\./,
+  /^classes\./, /^heifersRetained(\.|$)/, /^labor\.freedTimeUse$/, /^settings\.oppCostPerHour$/, /^startYear$/,
+  /^labor\.otherHoursSaved(\.|$)/, /^labor\.avoidedHire\./, /\.(staysWithLand|leaseReimbursement)$/];
+const MODULE_ORDER = {
+  water: [/^(water\.monitors|costs\.monitors\.)/, /^costs\.mounting\./, INSTALL, /^costs\.subscription\./, /^costs\.batteries\./,
+    /^water\.blocks\./, /^served\./, /^labor\.cut\./, /^labor\.added\./, /^water\.variableCostPerMile$/, /^riskLines\./,
+    /^water\.fewerChecksLoss(\.|$)/, /^ramp\./],
+  vf: [/^vf\.pricing$/, /^costs\.subscription\./, /^costs\.(collars|serviceFee)\./, /^(costs\.collarBatteries\.|vf\.batteriesPerCollar$)/,
+    /^costs\.baseStations\./, /^costs\.infrastructure\./, /^enrolled\./, /^vf\.collarLoss\./, /^labor\.handling\./, /^vf\.fence\./,
+    /^vf\.gatherHoursToday$/, /^(vf\.gatherHoursCut$|labor\.cut\.)/, /^vf\.(healthCheckHoursCut|validatedAlert)$/, /^production\./,
+    /^riskLines\./, /^ramp\./],
+  eid: [/^eid\.ruleApplies\./, /^eid\.freeTags\./, /^served\./, /^(eid\.tagPrice$|costs\.(cowTags|calfTags|retags)\.|eid\.retagPct$)/,
+    /^costs\.(reader|indicatorBars|platform)\./, /^costs\.software\./, /^labor\.handling\./, /^eid\.recordingHoursToday$/,
+    /^labor\.added\./, /^labor\.cut\./, /^eid\.premium\./, /^eid\.dosing\./, /^production\./, /^riskLines\./, /^ramp\./],
+};
+/** An input's place in 9.4's order: its index in the shared list, else after the shared inputs in its module's list. */
+function inputOrder(a, path) {
+  if (path === undefined) return Infinity;
+  const hit = (x) => (typeof x === "function" ? x(a, path) : x.test(path));
+  const shared = SHARED_ORDER.findIndex(hit);
+  if (shared >= 0) return shared;
+  const own = (MODULE_ORDER[a.module] ?? []).findIndex(hit);
+  return own >= 0 ? SHARED_ORDER.length + own : Infinity;
+}
+const BENEFIT_KINDS = ["cash", "risk", "production", "hours"];
+/**
+ * True when a blank input of line l is a benefit input for the blank-benefits sentence: an input of a benefit, risk,
+ * production or hours-saved line, or of the capacity line other than the hours the technology takes (unpaid added and
+ * handling hours, which are costs in time); never the verification fee.
+ */
+function benefitInput(l, path) {
+  if (path === "eid.premium.verificationFee") return false;
+  if (BENEFIT_KINDS.includes(l.kind)) return true;
+  return l.kind === "capacity" && !/^labor\.(added\.\d+\.hours|handling\.)/.test(path);
+}
+// Blanks that are not "not entered": the ramp (blank is 1), a stored share (blank is the land units' default), a price
+// ("Quote required"), the months served (blank is 12) and the inputs to which 9.2 to 9.4 give a blank its own meaning
+// (9.5 item 7).
+const OWN_BLANK = [/^ramp\./, /^(costShares|benefitShares)\./, /\.operatorShare(\.|$)/, /^costs\.[^.]+\.unitCost$/, /^eid\.tagPrice$/,
+  /chargePerCollar$/, /lifeYears$/, /planMiles$/, /gatherHoursToday$/, /^served\.\w+\.months$/, /^classes\.undefined\./];
+const blankValue = (v) => v === null || v === undefined || v === "" || (Array.isArray(v) && v.every(blankValue));
+
+/** The caption of the cumulative cash chart (9.5 item 10). */
+export const CUMULATIVE_CAPTION = "Year 0 holds purchases, fees billed in advance and any avoided capital; each later point "
+  + "adds that year's cash benefits and residual value, less its costs. Your share, before tax. Payback is the point after "
+  + "which the line stays at or above zero.";
+
+/**
+ * The cumulative cash chart's points and payback mark (9.5 item 10): the operator's cumulative net cash for years 0..T,
+ * and the payback point only when the 9.3 payback state gives a number of years; otherwise its state text.
+ */
+export function cumulativeChart(r) {
+  let c = 0;
+  const points = r.N.map((x, t) => ({ year: t, value: (c += x) }));
+  const mark = r.payback.state === "years" ? { at: r.payback.years, text: `Payback: ${paybackText(r.payback)} (before tax)` } : null;
+  return { points, mark, state: mark ? null : `Cash payback (before tax): ${paybackText(r.payback)}` };
+}
+
+// ---------------------------------------------------------------- the written-out formulas (9.5 item 10)
+
+const firstOperating = (r) => Math.min(r.startYear + 1, r.T);
+const getPath = (obj, path) => path.split(".").reduce((o, k) => (o === null || o === undefined ? undefined : o[k]), obj);
+const yearsWith = (xs) => xs.map((x, t) => (Math.abs(x) > 0.005 ? t : null)).filter((t) => t !== null);
+/** A line's yearly amounts in a few words: "$3,650 a year in years 0, 1, 2, …, 9", "$1,000 in years 4 and 8". */
+function amounts(series) {
+  const ts = yearsWith(series);
+  if (!ts.length) return "$0 in every year";
+  const same = ts.every((t) => Math.abs(series[t] - series[ts[0]]) < 0.005);
+  if (ts.length === 1) return `${money(series[ts[0]])} in year ${ts[0]}`;
+  return same ? `${money(series[ts[0]])} a year in years ${yearList(ts)}` : `${money(series[ts[0]])} in year ${ts[0]}, then other amounts, in years ${yearList(ts)}`;
+}
+const yearList = (ts) => (ts.length > 4 ? `${ts.slice(0, 3).join(", ")}, …, ${ts[ts.length - 1]}` : ts.join(", "));
+
+/** The formula of one cost or cash benefit line, with its values filled in from the analysis (9.5 item 10). */
+function lineFormula(a, r, l) {
+  const t1 = firstOperating(r);
+  const c = a.costs?.[l.id] ?? {};
+  const pv = `PV ${money(l.pv)}`;
+  const nonzero = yearsWith(l.series);
+  const inYears = nonzero.length ? ` in year${nonzero.length > 1 ? "s" : ""} ${yearList(nonzero)}` : " (none within the horizon)";
+  const pick = (x) => (Array.isArray(x) ? at(x, t1) : x);
+  const n = (x) => (x === null || x === undefined || x === "" ? 0 : Number(x));
+  const inT1 = `${money(l.series[t1])} in year ${t1}; ${pv}`;
+  // The factors the engine applies after the values shown, named so that the shown values multiply to the result: a
+  // benefit's ramp in its first operating year (9.3 B3), the operator's share (F6), and what is left (the land units'
+  // part, a lease's end, the baseline's cap, 9.3 and 9.6).
+  const after = (product, amount, benefit) => {
+    if (!(Math.abs(product) > 1e-9)) return "";
+    const k = t1 - r.startYear;
+    const ramp = benefit && k >= 1 && k <= 3 && a.ramp?.[k] !== undefined && a.ramp?.[k] !== null ? n(a.ramp[k]) : 1;
+    const one = shareOf();
+    // Nothing counted from values above 0: the ramp or the share that makes it 0.
+    if (!(Math.abs(amount) > 0.005)) return ramp === 0 ? " × ramp 0%" : one === 0 ? " × your share 0%" : "";
+    let rest = amount / product;
+    const parts = [];
+    if (ramp > 0 && ramp < 1) {
+      parts.push(`ramp ${percent(ramp)}`);
+      rest /= ramp;
+    }
+    if (one !== null && one > 0 && one < 1) {
+      parts.push(`your share ${percent(one)}`);
+      rest /= one;
+    }
+    if (Math.abs(rest - 1) > 1e-4) parts.push(`${percent(rest)} (${one === null ? "your share on each land unit, " : ""}the land units and limits in the year table)`);
+    return parts.map((x) => ` × ${x}`).join("");
+  };
+  // The operator's share of the line when every land unit has the same one, else null (F6).
+  const shareOf = () => {
+    const line = { id: l.id, kind: l.kind, operatorShare: l.kind === "cost" ? c.operatorShare : undefined, fence: l.id === "fence" };
+    const shares = landUnitsOf(a).map((u) => n(operatorShare(a, line, u)));
+    return shares.every((x) => x === shares[0]) ? shares[0] ?? 1 : null;
+  };
+  const shareText = () => {
+    const one = shareOf();
+    return one === null ? ", times your share on each land unit" : one < 1 ? ` × your share ${percent(one)}` : "";
+  };
+  if (l.missing) return { expr: "not entered, not counted", result: "" };
+  switch (l.id) {
+    case "handling": {
+      const h = a.labor.handling, hours = r.hours.handling[t1] ?? 0, rate = n(h.paidRate) * (1 + n(h.loadPct));
+      return { expr: `${quantity(hours)} handling hours in year ${t1} × pay rate ${money(n(h.paidRate))}/h × (1 + payroll load ${percent(n(h.loadPct))})${after(hours * rate, l.series[t1], false)}`, result: inT1 };
+    }
+    case "vehicle": {
+      // Runs avoided a year (each block's runs × its share used) and the miles per run averaged over them (9.3).
+      const blocks = (a.water?.blocks ?? []).map((b) => ({ runs: n(b.runsPerWeek) * n(b.weeks) * shareUsed(b), miles: n(b.milesPerRun) }));
+      const runs = blocks.reduce((x, b) => x + b.runs, 0);
+      const miles = runs > 0 ? blocks.reduce((x, b) => x + b.runs * b.miles, 0) / runs : 0;
+      const perMile = n(a.water.variableCostPerMile);
+      return { expr: `${quantity(runs)} runs avoided a year × ${quantity(miles)} mi per run × vehicle cost ${money(perMile)}/mi${after(runs * miles * perMile, l.series[t1], true)}`, result: inT1 };
+    }
+    case "laborCut": {
+      const cut = a.labor.cut, u = cut.laborUnit, units = n(pick(cut.unitsCut));
+      const per = u === "hour" ? "" : `${quantity(n(cut.hoursPerUnit))} h per ${u ?? "unit"} × `;
+      const pay = u === "position" ? `salary ${money(n(cut.salary))}` : `${per}pay rate ${money(n(cut.paidRate))}/h`;
+      const each = u === "position" ? n(cut.salary) : (u === "hour" ? 1 : n(cut.hoursPerUnit)) * n(cut.paidRate);
+      const cutText = u ? count(units, LABOR_UNITS[u].replace(/s$/, "")) : `${quantity(units)} units`;
+      return { expr: `${cutText} cut × ${pay} × (1 + payroll load ${percent(n(cut.loadPct))})${after(units * each * (1 + n(cut.loadPct)), l.series[t1], true)}, within the hours saved`, result: inT1 };
+    }
+    case "avoidedHire": {
+      const h = a.labor.avoidedHire;
+      return { expr: `salary ${money(n(h.salary))} × (1 + payroll load ${percent(n(h.loadPct))})`, result: `${money(Math.max(...l.series))} a year${inYears}; ${pv}` };
+    }
+    case "fence": {
+      const f = a.vf.fence;
+      return { expr: `${quantity(n(f.miles))} mi × ${money(n(f.F))}/mi built in year ${n(f.k)}, every ${count(n(f.Lf), "year")}, with upkeep ${percent(n(f.m))} of its cost a year, less its residual at the end${f.mode === "deferred" ? `, less the same stream ${count(n(f.d), "year")} later` : ""}`, result: pv };
+    }
+    case "premium": {
+      const p = a.eid.premium ?? {}, sold = n(pick(a.classes?.calvesSold?.head));
+      const net = n(p.saleCwt) * n(p.premiumPerCwt) - n(p.verificationFee);
+      return { expr: `${quantity(sold)} calves sold × (${quantity(n(p.saleCwt))} cwt × ${money(n(p.premiumPerCwt))}/cwt − verification fee ${money(n(p.verificationFee))})${after(sold * net, l.series[t1], true)}`, result: inT1 };
+    }
+    case "dosing": {
+      const entries = Object.entries(a.eid.dosing.applications ?? {});
+      const apps = entries.map(([c, k]) => `${quantity(n(pick(a.classes?.[c]?.head)))} ${className(c)} × ${count(n(k), "application")}`);
+      const doses = entries.reduce((x, [c, k]) => x + n(pick(a.classes?.[c]?.head)) * n(k), 0), each = n(a.eid.dosing.perApplication);
+      return { expr: `(${apps.join(" + ") || "no applications"}) × ${money(each)} per application${after(doses * each, l.series[t1], true)}`, result: inT1 };
+    }
+    case "production": {
+      const p = a.production, lbs = n(p.lbPerHeadPerDay) * n(p.days);
+      const sold = (p.classes ?? []).map((cl) => ({ cl, head: n(pick(a.classes?.[cl]?.head)) * (cl === "yearlings" && p.soldShare !== null && p.soldShare !== undefined && p.soldShare !== "" ? n(p.soldShare) : 1), gain: n(a.classes?.[cl]?.valueOfGain) }));
+      // The sale classes' names already say "sold" ("calves sold"); yearlings' does not.
+      const value = sold.map((x) => `${quantity(x.head)} ${className(x.cl)}${/ sold$/.test(className(x.cl)) ? "" : " sold"} × ${money(x.gain)}/lb`).join(" + ") || "no classes sold";
+      return { expr: `${quantity(n(p.lbPerHeadPerDay))} lb/head/day × ${count(n(p.days), "day")} × (${value})${after(lbs * sold.reduce((x, y) => x + y.head * y.gain, 0), l.series[t1], true)}`, result: inT1 };
+    }
+    default:
+      break;
+  }
+  if (l.id.startsWith("added:")) {
+    // The year with the most cost, as the result names it, or with the most hours while the cost is 0 in every year (a
+    // pay rate or a share of 0), and the item's own hours in it (the line is the operator's share of their cost, which
+    // after() names).
+    const item = a.labor.added[Number(l.id.slice(6))], rate = n(item.paidRate) * (1 + n(item.loadPct));
+    const most = (f) => l.series.reduce((m, x, t) => (f(t) > f(m) ? t : m), 0);
+    const top = l.series.some((x) => x > 0.005) ? most((t) => l.series[t]) : most((t) => addedHours(item.hours, t, r.startYear, r.T));
+    const hours = addedHours(item.hours, top, r.startYear, r.T);
+    return { expr: `${quantity(hours)} h in year ${top} × pay rate ${money(n(item.paidRate))}/h × (1 + payroll load ${percent(n(item.loadPct))})${after(hours * rate, l.series[top], false)}`,
+      result: `${money(Math.max(...l.series))} at most in a year${inYears}; ${pv}` };
+  }
+  if (l.kind === "cost" && l.purchases) {
+    // Free tags (EID) lower a purchase's quantity in the years they apply (9.3).
+    const bought = l.purchases.filter((p) => p.qty > 0).map((p) => `${p.free > 0 ? `(${quantity(p.qty)} − ${quantity(p.free)} free)` : quantity(p.qty)} × ${money(n(p.unitCost))} in year ${p.year}`);
+    const residual = l.residual?.[r.T] ? `; residual at year ${r.T} ${money(l.residual[r.T])}` : "";
+    const repairs = n(c.repairPct) > 0 ? `, plus repairs at ${percent(n(c.repairPct))} of the cost a year` : "";
+    return { expr: `quantity × unit price: ${bought.length ? bought.join(", ") : "no purchase within the horizon"}${repairs}${shareText()}`,
+      result: `${money(l.series.reduce((x, y) => x + y, 0))} in all${residual}; ${pv}` };
+  }
+  if (l.kind === "cost") {
+    const pricePath = { cowTags: "eid.tagPrice", calfTags: "eid.tagPrice", retags: "eid.tagPrice", collarLoss: "vf.collarLoss.chargePerCollar" }[l.id]
+      ?? `costs.${l.id}.unitCost`;
+    const info = inputInfo(a, pricePath);
+    const price = getPath(a, pricePath);
+    // A price with more than cents (a version 1 link's $0.30417) shows them, so the shown values multiply to the result.
+    const cents = (x) => (info.unit.startsWith("$") && Math.abs(x) < 100 && Math.abs(x * 100 - Math.round(x * 100)) > 1e-6
+      ? signed(x, `$${Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 5 })}`) + info.unit.slice(1) : withUnit(x, info.unit));
+    const priceText = price === null || price === undefined ? "price not entered"
+      : Array.isArray(price) && price.some((x) => n(x) !== n(price[0])) ? "the price entered for each season" : cents(n(pick(price)));
+    const billing = l.id === "collarLoss" || l.id === "collarBatteries" || ["calfTags", "retags"].includes(l.id) ? "arrears"
+      : c.billing ?? (["subscription", "serviceFee"].includes(l.id) ? "advance" : "arrears");
+    // The quantity billed: one number when every season bills the same, else the first season's.
+    const billed = (l.bills ?? []).filter((b) => b.qty > 0);
+    // Billed per head per year, the quantity is head-months still (head × 12), at a price per head-month.
+    const per = { perHeadMonth: " head-months", perHeadYear: " head-months" }[c.basis] ?? "";
+    const qty = !billed.length ? "quantity" : billed.every((b) => b.qty === billed[0].qty) ? `${quantity(billed[0].qty)}${per}`
+      : `quantity (${quantity(billed[0].qty)}${per} in year ${billed[0].year}, then by year)`;
+    const free = (l.bills ?? []).filter((b) => b.free > 0).map((b) => `${quantity(b.free)} free in year ${b.year}`);
+    return { expr: `${qty} × ${priceText}${priceText.endsWith("season") ? "" : " each season"}${free.length ? `, less ${free.join(", ")}` : ""}${shareText()}, billed ${billing === "advance" ? "at its start" : "at its end"}`,
+      result: `${amounts(l.series)}; ${pv}` };
+  }
+  return { expr: "as entered", result: pv };
+}
+
+/**
+ * The written-out formulas (9.5 item 10): each cost and cash benefit line with its formula and its values, then the
+ * three NPVs, the BCR, the IRR and the payback with their state texts, and the note on what is not included.
+ */
+export function formulas(a, r) {
+  const unit = roundingUnit(a, r);
+  const rate = quantity(r.rate * 100);
+  const lineRows = (kind) => r.lines.filter((l) => l.kind === kind).map((l) => ({ name: l.label, ...lineFormula(a, r, l) }));
+  return {
+    sections: [
+      { title: "Costs (your share)", rows: lineRows("cost") },
+      { title: "Cash benefits (your share)", rows: lineRows("cash") },
+      { title: "Results (before tax)", rows: [
+        { name: "Net cash", expr: "cash benefits + residual value − costs, each year (the year table)", result: "" },
+        { name: "Cash NPV", expr: `Σ net cash ÷ (1 + ${rate}%)^t, t = 0…${r.T}`, result: `${money(r.cashNPV)} (${aboutMoney(r.cashNPV, unit)})` },
+        { name: "Cash NPV including expected losses avoided", expr: "cash NPV + PV of expected losses avoided", result: money(r.cashNPVWithRisk) },
+        { name: "Economic NPV", expr: "cash NPV + PV of losses avoided + PV of the hours freed at your time rate + PV of production not from your records", result: money(r.economicNPV) },
+        { name: "BCR", expr: "(PV of cash benefits + PV of residual value) ÷ PV of costs", result: r.bcr === null ? "n/a" : r.bcr.toFixed(2) },
+        { name: "IRR", expr: "the rate at which the NPV of net cash is 0", result: irrText(r.irr) },
+        { name: "Cash payback", expr: "the year from which cumulative net cash stays at or above 0, counted from year 0 and interpolated within the year", result: paybackText(r.payback) },
+      ] },
+    ],
+    note: "Not included: taxes (results are before tax), financing (the lender's view comes later) and price changes (amounts are in today's dollars with a real discount rate).",
+  };
+}
+
+/** The notice the page shows in place of results that are not finite (judgment: values too large to compute). */
+export const TOO_LARGE = "These values are too large to compute. Check the inputs for a number entered far too large.";
+
+// ---------------------------------------------------------------- the assumptions list and sources (9.5 items 4 and 5)
+
+/** What each evidence class means, as the badges and the assumptions list say it (9.5 item 3). */
+export const CLASS_TEXT = { A: "official statistics", B: "research or extension", C: "vendor information", D: "your entry", E: "made-up example value" };
+
+/**
+ * A badge's hover text (9.5 items 3 and 4): what its class means, never its source, so a company or product name
+ * appears only in a linked source citation.
+ */
+export const badgeTitle = (cls) => CLASS_TEXT[cls] ?? "";
+const WORD_VALUES = {
+  cowCalf: "commercial cow-calf", stocker: "stocker", seedstock: "seedstock", other: "other", owned: "owned", leased: "leased",
+  tenant: "tenant", landlord: "landlord", absorbed: "absorbed", replacesPaidWork: "replaces paid work", hour: "hours", day: "days",
+  week: "weeks", position: "a position", paid: "a paid hand", unpaid: "unpaid", capital: "bought", annual: "billed each season",
+  fixed: "one amount", perDevice: "per device", perHeadMonth: "per head per month", perHeadYear: "per head per year",
+  advance: "at the start of the season", arrears: "at the end of the season", straightLine: "straight line", none: "none",
+  pctOfCost: "a % of cost", amount: "an amount", avoided: "avoided", deferred: "deferred", purchased: "purchased collars",
+};
+
+/** A stored value as the assumptions list shows it, in the unit the page uses for its input. */
+function valueText(a, path, v) {
+  const { unit, scale = 1 } = inputInfo(a, path);
+  const one = (x) => {
+    if (typeof x === "boolean") return x ? "yes" : "no";
+    if (typeof x === "string") return WORD_VALUES[x] ?? CLASS_NAMES[x] ?? x;
+    if (typeof x !== "number") return "blank";
+    return withUnit(x * scale, unit);
+  };
+  if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v.map(one).join(", ");
+  // The free tags' billing years are a list of years, not a value by year (9.2).
+  if (path === "eid.freeTags.years" && Array.isArray(v)) {
+    const ys = v.filter((x) => typeof x === "number");
+    return ys.length === 0 ? "blank" : yearsNamed(ys);
+  }
+  // A per-year list as the engine reads it, years 0..T, its last value carried forward (9.2).
+  if (Array.isArray(v)) {
+    return byYearText(Array.from({ length: lastShownYear(a) + 1 }, (_, t) => at(v, t)).map((x) => (typeof x === "number" ? one(x) : "blank")));
+  }
+  return one(v);
+}
+
+/** Years named in a sentence: "year 3", "years 1 and 2", "years 1, 2 and 4". */
+const yearsNamed = (ys) => (ys.length === 1 ? `year ${ys[0]}` : `years ${ys.slice(0, -1).join(", ")} and ${ys.at(-1)}`);
+
+/**
+ * A value entered by year: the value most years share, with the years that differ named ("$100 per monitor in years 4
+ * and 8, $0 per monitor in the other years"), or each year in turn when no two years share a value.
+ */
+function byYearText(texts) {
+  const count = new Map();
+  for (const t of texts) count.set(t, (count.get(t) ?? 0) + 1);
+  const [base, n] = [...count].reduce((m, x) => (x[1] > m[1] ? x : m));
+  if (n === texts.length) return `${base} in every year`;
+  if (n === 1) return `by year from year 0: ${texts.join("; ")}`;
+  const years = (t) => texts.flatMap((x, i) => (x === t ? [i] : []));
+  const others = [...count.keys()].filter((t) => t !== base).map((t) => `${t} in ${yearsNamed(years(t))}`);
+  return `${others.join(", ")}, ${base} in the other years`;
+}
+
+/** A source's address when it is a web page (http or https), else null: the page links to nothing else (9.5 item 4). */
+export function safeUrl(u) {
+  try {
+    return ["http:", "https:"].includes(new URL(u).protocol) ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The source part of a value's label (9.5 item 4): a price's label when it has one, else its source with its date,
+ * and, for research from outside the US, the country, currency and data year. The link goes to prov.url.
+ */
+export function sourceText(p) {
+  if (!p) return "";
+  const price = priceLabel(p);
+  if (price && (p.placeholder || p.cls === "C")) return price;
+  const parts = [p.src];
+  if (p.pub) parts.push(p.pub);
+  if (p.region && !/^US\b/.test(p.region)) parts.push(`${p.region}${p.currency && p.currency !== "USD" ? `, ${p.currency}` : ""}${p.dataYear ? `, data ${p.dataYear}` : ""}; may not apply in the US`);
+  return parts.filter(Boolean).join(", ");
+}
+
+/**
+ * Every value with its class and source (9.5 item 4), in the order the analysis holds them: the input's label, its
+ * value, its evidence class and what that class means, the source text and link, any note, and whether it is a
+ * synthetic placeholder (flagged, with "Keep this value", in the user's own analysis until kept: 9.5 item 5).
+ */
+export function assumptions(a) {
+  return Object.entries(a.prov ?? {}).map(([path, p]) => {
+    const v = path.split(".").reduce((o, k) => (o === null || o === undefined ? undefined : o[k]), a);
+    const source = sourceText(p);
+    return {
+      path, label: inputInfo(a, path).label, value: valueText(a, path, v), cls: p.cls, classText: CLASS_TEXT[p.cls] ?? "",
+      source, cite: sourceCite(p, source), url: p.url ?? null, note: p.placeholder || p.cls === "C" ? null : p.note ?? null,
+      placeholder: !!p.placeholder, confirmed: !!p.confirmed,
+    };
+  });
+}
+
+/**
+ * The part of a source text that links to prov.url (9.5 item 4): the source and its document, "<src>, <pub>" for a
+ * vendor price and <src> otherwise; null when the record has no link or the text does not hold it.
+ */
+function sourceCite(p, source) {
+  if (!safeUrl(p.url) || !p.src) return null;
+  const cite = p.cls === "C" && p.pub ? `${p.src}, ${p.pub}` : p.src;
+  return source.includes(cite) ? cite : null;
+}
+
+// ---------------------------------------------------------------- the verdict area and the rate (9.5 items 1 and 5)
+
+export const INDICATIVE = "Indicative only: most of the benefit is estimated, not from your records.";
+
+/**
+ * "Indicative only" (9.3, 7.3): a cash line, or a capital line's residual, is estimated when any input its value rests
+ * on is [B], [C] or [E]; the line shows when the PV of the estimated ones is more than half of PV(B) + PV(R). A price
+ * never supports a benefit line: a cash line's inputs are its own. A residual rests on its line's inputs and on its own
+ * (the share of cost, the life of a straight-line residual, or the amount, which alone gives an amount residual); the
+ * avoided fence also on its life, build year and, when deferred, the years deferred.
+ */
+export function indicativeOnly(a, r) {
+  const estimated = (paths) => paths.some((p) => ["B", "C", "E"].includes(a.prov?.[p]?.cls));
+  let pv = 0;
+  for (const l of r.lines) {
+    if (l.kind === "cash" && estimated([...(l.paths ?? []), ...fencePaths(a, l)])) pv += l.pv;
+    if (l.kind === "cost" && l.pvResidual && estimated(residualPaths(a, l))) pv += l.pvResidual;
+  }
+  return pv > 0.5 * (r.pv.B + r.pv.R);
+}
+
+/** The fence's inputs besides those it multiplies: its life, build year and years deferred (9.3 Virtual fence). */
+function fencePaths(a, l) {
+  if (l.id !== "fence") return [];
+  return ["vf.fence.Lf", "vf.fence.k", ...(a.vf?.fence?.mode === "deferred" ? ["vf.fence.d"] : [])];
+}
+
+/** The inputs a capital line's residual rests on, by its mode (9.3, as roi.js scheduleCapital reads it). */
+function residualPaths(a, l) {
+  const c = a.costs?.[l.id] ?? {}, p = `costs.${l.id}`;
+  const life = c.lifeYears === null || c.lifeYears === undefined || c.lifeYears === "" ? null : c.lifeYears;
+  const mode = c.residual?.mode || (life === null ? "none" : "straightLine");
+  if (mode === "amount") return [`${p}.residual.dollars`];
+  return [...(l.paths ?? []), ...(mode === "pctOfCost" ? [`${p}.residual.pct`] : mode === "straightLine" ? [`${p}.lifeYears`] : [])];
+}
+
+/**
+ * The verdict area in its order (9.5 item 1): "Indicative only" when it applies; the verdict sentence; the
+ * payback-target line; the "It would pay" sentence when the N-year test fails; the capacity-hours line; the rate and
+ * placeholder notes; and the published-prices sentence. bars are the tornado's (tornado(a, r).bars).
+ */
+export function verdictArea(a, r, test, rows, bars) {
+  const lines = [];
+  if (!r.noCashFlows && indicativeOnly(a, r)) lines.push(INDICATIVE);
+  lines.push(verdictSentence(a, r, bars), paybackTargetLine(test));
+  const pay = wouldPaySentence(test, rows);
+  if (pay) lines.push(pay);
+  const hours = capacityLine(r);
+  if (hours) lines.push(hours);
+  lines.push(...verdictNotes(a), PUBLISHED_PRICES);
+  return lines;
+}
+
+export const RATE_EXAMPLE_LABEL = "Example assumption (real rate), not a recommendation. Review it for your operation.";
+export const RATE_PROMPT = "Review this rate";
+export const RATE_HELP = "real rate ≈ your loan rate + a risk premium − expected inflation";
+
+/**
+ * What the page shows with the discount rate (9.5 item 5): the example label while the rate is the example's
+ * unedited value, followed by "Reviewed" once kept; the "Review this rate" prompt, its help text and the "Keep this
+ * rate" button while the analysis is the user's own and the rate is not reviewed. An edited rate is the user's [D]
+ * value, with its badge and no label; a version 1 link's rate shows its badge and source ("version 1 link"),
+ * followed by "Reviewed" once kept.
+ */
+export function rateField(a) {
+  const p = a.prov?.["settings.discountRate"];
+  const reviewed = !!a.settings.rateReviewed;
+  const own = !!a.settings.ownAnalysis;
+  const example = exampleRate(a);
+  let label = example ? RATE_EXAMPLE_LABEL : p?.src === "version 1 link" ? p.src : null;
+  if (label && reviewed) label += " Reviewed";
+  return { label, cls: p?.cls ?? null, prompt: own && !reviewed, help: RATE_HELP };
+}
+
+export const PLACEHOLDER_FLAG = "Not yet replaced or confirmed.";
+
+/**
+ * The flag after a synthetic placeholder's label (9.5 item 5): in the user's own analysis, "Not yet replaced or
+ * confirmed." with a "Keep this value" button until kept, then "Confirmed" with no button. null otherwise.
+ */
+export function placeholderFlag(a, path) {
+  const p = a.prov?.[path];
+  if (!p?.placeholder) return null;
+  if (p.confirmed) return { text: "Confirmed", keep: false };
+  return a.settings.ownAnalysis ? { text: PLACEHOLDER_FLAG, keep: true } : null;
+}
+
+/**
+ * The label under a price input (9.5 items 4 and 7): its price label with the link to its source, or "Quote required"
+ * when it is blank. { text, cite, url, quote }: cite is the part of text that links to url.
+ */
+export function priceNote(a, path, value) {
+  const blankValue = value === null || value === undefined || value === "" || (Array.isArray(value) && value.every((x) => x === null || x === ""));
+  if (blankValue) return { text: "Quote required", cite: null, url: null, quote: true };
+  const p = a.prov?.[path];
+  const text = priceLabel(p);
+  if (!text) return null;
+  const cite = p.cls === "C" ? `${p.src}, ${p.pub}` : null;
+  return { text, cite: cite && text.includes(cite) ? cite : null, url: safeUrl(p.url), quote: false };
+}
+
+// ---------------------------------------------------------------- sources (9.5 item 5)
+
+/**
+ * The page's Sources table (9.5 items 4 and 5), rebuilt from the examples' `prov`: for each example, each value with
+ * a source (a published, reported or researched value) or a synthetic placeholder, with its label, value, what it is
+ * and its linked citation. Benefit assumptions [E] are in the assumptions list instead.
+ */
+export function exampleSources(examples) {
+  const rows = [];
+  for (const a of examples) {
+    for (const x of assumptions(a)) {
+      if (!(x.placeholder || ["A", "B", "C"].includes(x.cls))) continue;
+      rows.push({ example: EXAMPLE_NAMES[a.example], label: x.label, value: x.value, cls: x.cls, source: x.source, cite: x.cite,
+        url: x.url, note: x.note });
+    }
+  }
+  return rows;
 }

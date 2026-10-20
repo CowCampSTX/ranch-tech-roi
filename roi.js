@@ -1,6 +1,6 @@
 // Ranch technology ROI engine (phase 1). Pure functions, no dependencies. The rules are those of
 // docs/audit/phase1-spec.md: the data model in 9.2 and the formulas in 9.3. Phase 1 builds this engine in steps
-// (9.1); until step 6 the page keeps running on today's model, in v1.js.
+// (9.1); from step 6 the page runs on it, and v1.js keeps only version 1's fields and presets, for reading old links.
 // Money is in today's US dollars, before tax; the discount rate is real. Years run t = 0..T.
 // Built so far: cost lines with the capital scheduler, billing and commitments (F5), labor (F1), pools with the
 // single-module clamp and combine() (F9), head-months, head-based quantities and the cattle-presence rule (F3), and the
@@ -382,6 +382,9 @@ export function shareCap(block) {
   return runs > 0 ? Math.max(0, (runs - num(block.minVisitsPerWeek)) / runs) : 0;
 }
 
+/** A paid cut whose hours per unit do not count: one in hours, or one whose unit is not chosen yet (9.2 gives no default). */
+const hoursUnit = (cut) => !cut.laborUnit || cut.laborUnit === "hour";
+
 /**
  * The share of a block's runs avoided that the analysis uses (9.3): as entered, at most its cap. A blank share is 0, as
  * is the default of a block flagged for freezing or the feeding route.
@@ -399,7 +402,9 @@ function waterLines(a) {
   const blocks = list.map((b) => ({ b, avoided: num(b.runsPerWeek) * num(b.weeks) * shareUsed(b) }));
   const avoided = sum(blocks.map((x) => x.avoided));
   const perRun = (f) => (avoided > 0 ? sum(blocks.map((x) => x.avoided * num(x.b[f]))) / avoided : 0);
-  const blockPaths = (f) => list.flatMap((b, i) => ["runsPerWeek", "weeks", "shareAvoided", f].map((k) => `water.blocks.${i}.${k}`));
+  // A block's minimum visits are an input of the runs avoided when its cap, not its share, sets the share used.
+  const blockPaths = (f) => list.flatMap((b, i) => ["runsPerWeek", "weeks", "shareAvoided",
+    ...(num(b.shareAvoided) > 0 && num(b.shareAvoided) >= shareCap(b) ? ["minVisitsPerWeek"] : []), f].map((k) => `water.blocks.${i}.${k}`));
   // The vehicle counts 0 because of a blank (9.5 item 4) when its cost per mile is blank, or when it avoids no runs and
   // a block that could avoid runs (one with runs and a cap above 0) has its share blank. A blank share beside a block
   // that still avoids runs is listed under its own label instead.
@@ -474,7 +479,7 @@ function eidLines(a) {
  * 0 in some year 0..T, never the sale flows, in the class order of 9.2.
  */
 export function eidRuleClasses(a) {
-  const years = [...Array(a.settings.T + 1).keys()];
+  const years = [...Array(lastShownYear(a) + 1).keys()];
   return Object.keys(CLASS_NAMES).filter((c) => !SALE_FLOWS.includes(c)
     && years.some((t) => num(at(a.classes?.[c]?.head, t)) > 0));
 }
@@ -496,17 +501,22 @@ function applyFreeTags(a, lines, schedules, T) {
     for (const b of full.purchases ?? full.bills) {
       const free = Math.min(left[b.year], b.qty);
       if (!(free > 0)) continue;
+      b.free = free; // for the written-out formula (9.5 item 10)
       full.cost[b.year] -= free * b.unitCost;
       left[b.year] -= free;
     }
   }
 }
 
-/** The inputs the handling hours multiply (9.3 Labor), for the provenance rules. */
+/**
+ * The inputs the handling hours multiply (9.3 Labor), for the provenance rules: each event's, and, in a virtual fence
+ * analysis, the refit gathers and training (9.4 asks for them there only).
+ */
 function handlingPaths(a, h) {
+  const vf = a.module === "vf" ? ["gathers", "gatherRiders", "hoursPerGather", "trainingDays", "trainingRiders", "hoursPerDay"] : [];
   return [...new Set([...(h.events ?? []).flatMap((e, i) => [...["timesPerYear", "minutesPerHead", "crewSize"].map((f) => `labor.handling.events.${i}.${f}`),
     ...headPaths(a, e.classes ?? [])]),
-  ...["gathers", "gatherRiders", "hoursPerGather", "trainingDays", "trainingRiders", "hoursPerDay"].map((f) => `labor.handling.${f}`)])];
+  ...vf.map((f) => `labor.handling.${f}`)])];
 }
 
 /**
@@ -560,7 +570,7 @@ export function buildLines(a) {
     (L.added ?? []).forEach((item, i) => {
       if (item.doneBy !== "paid") return;
       const rate = num(item.paidRate) * (1 + num(item.loadPct));
-      lines.push({ id: `added:${i}`, label: item.label, kind: "cost", flow: (t) => addedHours(item.hours, t, s, T) * rate,
+      lines.push({ id: `added:${i}`, label: addedName(a, i), kind: "cost", flow: (t) => addedHours(item.hours, t, s, T) * rate,
         paths: ["hours", "paidRate", "loadPct"].map((f) => `labor.added.${i}.${f}`) });
     });
     if (L.cut) {
@@ -569,7 +579,8 @@ export function buildLines(a) {
         // Not ramped itself: it follows the ramped hours through f_t (9.3 Labor).
         id: "laborCut", label: LABOR_CUT_LABEL[a.module] ?? "Hired labor cut", kind: "cash", ramp: false,
         claim: (t, ctx) => ctx.unitsCut[t], valuePerUnit: () => cutValuePerUnit(L.cut),
-        paths: ["unitsCut", ...pay.filter((f) => !(f === "hoursPerUnit" && L.cut.laborUnit === "hour")), "loadPct"]
+        // Hours per unit count only once a unit other than the hour is chosen (the page asks for them then).
+        paths: ["unitsCut", ...pay.filter((f) => !(f === "hoursPerUnit" && hoursUnit(L.cut))), "loadPct"]
           .map((f) => `labor.cut.${f}`),
       });
     }
@@ -589,13 +600,14 @@ export function buildLines(a) {
     }
   }
   if (a.module === "vf" || a.module === "eid") lines.push(productionLine(a));
-  (a.riskLines ?? []).forEach((r, i) => lines.push(riskLine(a, r, i, sharesCause(a, r))));
+  const labels = riskLabels(a);
+  (a.riskLines ?? []).forEach((r, i) => lines.push(riskLine(a, r, i, labels[i])));
   if (a.module === "water") lines.push(fewerChecksLine(a));
   // The capacity line multiplies the owner's time rate by the hours freed, so its inputs are the rate and every input
   // those hours come from: the hours saved, the paid hours cut and the unpaid added and handling hours (9.3; the
   // rounding rule, 7.3).
   const cutPaths = L?.cut && replacesPaidWork(L)
-    ? ["labor.cut.unitsCut", ...(L.cut.laborUnit === "hour" ? [] : ["labor.cut.hoursPerUnit"])] : [];
+    ? ["labor.cut.unitsCut", ...(hoursUnit(L.cut) ? [] : ["labor.cut.hoursPerUnit"])] : [];
   const unpaidPaths = [...(L?.added ?? []).flatMap((item, i) => (item.doneBy === "paid" ? [] : [`labor.added.${i}.hours`])),
     ...(L?.handling && L.handling.doneBy !== "paid" ? handlingPaths(a, L.handling) : [])];
   lines.push({
@@ -781,14 +793,13 @@ function productionLine(a) {
 
 /**
  * A risk line (F7, 9.3): eventsPerYear × headPerEvent × shareCaught head a year, claimed on deathLoss:<cause>, at the
- * value per head of its class. Kind "risk": it enters X only. Labeled "Losses avoided (<cause>)", with the class's
- * name when another risk line has the same cause (9.4).
+ * value per head of its class. Kind "risk": it enters X only. Labeled as riskLabels() says.
  */
-function riskLine(a, r, i, shared) {
+function riskLine(a, r, i, label) {
   const fields = ["cause", "class", "eventsPerYear", "headPerEvent", "shareCaught"];
   const missing = fields.some((f) => blank(r[f])) || blank(a.classes?.[r.class]?.valuePerHead);
   return {
-    id: `risk:${i}`, kind: "risk", label: riskLabel(r, shared),
+    id: `risk:${i}`, kind: "risk", label,
     // A line with no cause claims no pool: it counts 0 and is listed as not entered (judgment).
     pool: blank(r.cause) ? undefined : `deathLoss:${r.cause}`,
     claim: () => (missing ? 0 : num(r.eventsPerYear) * num(r.headPerEvent) * num(r.shareCaught)),
@@ -804,9 +815,19 @@ function riskLine(a, r, i, shared) {
  */
 function riskLabel(r, shared) {
   if (blank(r.cause)) return "Losses avoided";
-  return shared ? `Losses avoided (${r.cause}, ${CLASS_NAMES[r.class] ?? r.class})` : `Losses avoided (${r.cause})`;
+  return shared && !blank(r.class) ? `Losses avoided (${r.cause}, ${CLASS_NAMES[r.class] ?? r.class})` : `Losses avoided (${r.cause})`;
 }
 const sharesCause = (a, r) => !blank(r.cause) && (a.riskLines ?? []).filter((x) => x.cause === r.cause).length > 1;
+
+/**
+ * Every risk line's label, by riskLabel(). Lines that would still share a label (the same cause and class, or no cause
+ * yet) add their number, so each item, field and column names one line: "Losses avoided (water, cows), line 2"
+ * (judgment: 9.4 does not cover the case).
+ */
+function riskLabels(a) {
+  const base = (a.riskLines ?? []).map((r) => riskLabel(r, sharesCause(a, r)));
+  return base.map((l, i) => (base.indexOf(l) !== base.lastIndexOf(l) ? `${l}, line ${i + 1}` : l));
+}
 
 /**
  * The water module's optional offset for losses from fewer physical checks (9.3): a negative risk line with no pool,
@@ -1014,7 +1035,7 @@ export function analyzeLines(a, lines, opts = {}) {
       }
       cost.forEach((x, t) => (series.C[t] += x));
       residual.forEach((x, t) => (series.R[t] += x));
-      out.push({ ...base, series: cost, residual, byUnit, purchases: full.purchases, pv: npv(rate, cost), pvResidual: npv(rate, residual) });
+      out.push({ ...base, series: cost, residual, byUnit, purchases: full.purchases, bills: full.bills, pv: npv(rate, cost), pvResidual: npv(rate, residual) });
     } else {
       // Steps 1 and 3–5, then each part (step 2) × valuePerUnit (6) × its operator share (7).
       const before = years.map((t) => (counts(line, t) ? line.claim(t, ctx) * ramped(line, t) * cattle(line, t) * scaled(line, t) : 0));
@@ -1235,7 +1256,7 @@ export function nYearRun(a, N = paybackTargetOf(a)) {
 }
 
 // Lists of numbers that are not values by year (9.2): the ramp, by operating year, and the free tags' billing years.
-const NOT_PER_YEAR = new Set(["ramp", "eid.freeTags.years"]);
+export const NOT_PER_YEAR = new Set(["ramp", "eid.freeTags.years"]);
 
 /**
  * The analysis with each per-year input cut to its T + 1 entries (years 0..T, 9.2), so that a test past T carries
@@ -1848,6 +1869,14 @@ export const YEARS_MESSAGE = "Enter a whole number of years, 1 or more.";
 // of T + 1 years, so a link or entry of a million years would stop the page).
 export const MAX_YEARS = 50;
 export const MAX_YEARS_MESSAGE = `Enter ${MAX_YEARS} years or fewer.`;
+/**
+ * The last year the page shows, and fills a per-year list through: T taken whole and at most MAX_YEARS, so that a
+ * horizon validate() rejects (2.5, 60, a million) never builds a list of more than MAX_YEARS + 1 years.
+ */
+export function lastShownYear(a) {
+  const T = a.settings?.T;
+  return Number.isFinite(T) && T >= 0 ? Math.min(Math.floor(T), MAX_YEARS) : 0;
+}
 const wholeYears = (v) => Number.isInteger(v) && v >= 1;
 const yearIndex = (v) => Number.isInteger(v) && v >= 0;
 const show = (x) => (Math.round(x * 100) / 100).toLocaleString("en-US");
@@ -1889,7 +1918,7 @@ export function validate(a) {
       }
     }
     if (line.timing === "capital") {
-      if (!(blank(line.lifeYears) || wholeYears(line.lifeYears))) err(p + "lifeYears", "Life", YEARS_MESSAGE);
+      if (!(blank(line.lifeYears) || wholeYears(line.lifeYears))) err(p + "lifeYears", `Life (${name})`, YEARS_MESSAGE);
       const message = residualError(a, line, tOk ? T : null, s);
       if (message) err(p + "residual", "Residual", message);
     } else if (!blank(line.commitYears) && !yearIndex(line.commitYears)) {
@@ -1903,6 +1932,9 @@ export function validate(a) {
   return errors;
 }
 
+/** The name of labor.added item i: its name, or "added item <i + 1>" while it has none (9.4). */
+export const addedName = (a, i) => (blank(a.labor?.added?.[i]?.label) ? `added item ${i + 1}` : a.labor.added[i].label);
+
 /**
  * The label of labor.added item i's hours on the page (9.4), the unit they are entered in and the factor from the
  * stored value to it: water's install time (hours in the start year) and added monitoring time (entered in hours a
@@ -1911,7 +1943,7 @@ export function validate(a) {
  */
 export function addedHoursInput(a, i) {
   const items = a.labor?.added ?? [];
-  const name = items[i]?.label ?? `added item ${i + 1}`;
+  const name = addedName(a, i);
   if (a.module === "water" && name === "install") return { label: "Install time", unit: "h", scale: 1 };
   if (a.module === "water" && name === "monitoring time") return { label: "Added monitoring time", unit: "h/wk", scale: 1 / 52 };
   if (a.module === "eid") {
@@ -1959,10 +1991,9 @@ function paidHoursOver(a) {
 
 /** A line's label, by its id (9.4): for validation messages and the notices that name an input of a line. */
 export function lineLabel(a, id) {
-  if (id.startsWith("added:")) return a.labor?.added?.[Number(id.slice(6))]?.label ?? id;
+  if (id.startsWith("added:")) return a.labor?.added?.[Number(id.slice(6))] ? addedName(a, Number(id.slice(6))) : id;
   if (id.startsWith("risk:")) {
-    const r = a.riskLines?.[Number(id.slice(5))];
-    return r ? riskLabel(r, sharesCause(a, r)) : id;
+    return riskLabels(a)[Number(id.slice(5))] ?? id;
   }
   const labels = { laborCut: LABOR_CUT_LABEL[a.module] ?? "Hired labor cut", avoidedHire: "Avoided hire", production: "Weight gain",
     hoursFreed: "Hours freed", fewerChecks: "Losses from fewer physical checks", handling: "Handling labor",
@@ -1978,7 +2009,7 @@ export function lineLabel(a, id) {
 function validateLand(a, s, err) {
   const units = a.settings?.landUnits ?? [];
   units.forEach((u, i) => {
-    if (u.kind === "leased" && !wholeYears(u.leaseYears)) err(`settings.landUnits.${i}.leaseYears`, "Lease term", YEARS_MESSAGE);
+    if (u.kind === "leased" && !wholeYears(u.leaseYears)) err(`settings.landUnits.${i}.leaseYears`, `Lease term on land unit ${i + 1}`, YEARS_MESSAGE);
   });
   // Water and virtual fence need one or more land units (9.2): a list emptied by removing its last unit is an error.
   // (An analysis that holds no list, such as a test fixture, runs as one owned unit, landUnitsOf.)
@@ -2067,16 +2098,21 @@ function validateLabor(a, s, T, err) {
   if (cut) {
     const unit = cut.laborUnit;
     const entries = Array.isArray(cut.unitsCut) ? cut.unitsCut : [cut.unitsCut];
-    if (unit !== "hour" && entries.some((u) => !blank(u) && !Number.isInteger(u))) {
+    if (!blank(unit) && unit !== "hour" && entries.some((u) => !blank(u) && !Number.isInteger(u))) {
       err("labor.cut.unitsCut", unitsLabel, `${unitsLabel}: enter a whole number of ${unit}s, because they are paid whole.`);
     }
     if (paid && entries.some((u) => num(u) > 0)) {
       const why = `because the ${unitsLabel.toLowerCase()} needs it`;
-      if (unit !== "hour" && !(num(cut.hoursPerUnit) > 0)) {
-        err("labor.cut.hoursPerUnit", "Hours per unit", `Hours per unit: enter the paid hours in one ${unit}, ${why}.`);
+      // The unit has no default (9.2), so a cut with no unit has no pay to count (judgment: spec issue).
+      if (blank(unit)) {
+        err("labor.cut.laborUnit", "Paid labor is cut in", `Paid labor is cut in: choose hours, days, weeks or a position, ${why}.`);
+      } else {
+        if (unit !== "hour" && !(num(cut.hoursPerUnit) > 0)) {
+          err("labor.cut.hoursPerUnit", "Hours per unit", `Hours per unit: enter the paid hours in one ${unit}, ${why}.`);
+        }
+        if (unit === "position" && blank(cut.salary)) err("labor.cut.salary", "Salary", `Salary: enter it, ${why}.`);
+        if (unit !== "position" && blank(cut.paidRate)) err("labor.cut.paidRate", "Pay rate", `Pay rate: enter it, ${why}.`);
       }
-      if (unit === "position" && blank(cut.salary)) err("labor.cut.salary", "Salary", `Salary: enter it, ${why}.`);
-      if (unit !== "position" && blank(cut.paidRate)) err("labor.cut.paidRate", "Pay rate", `Pay rate: enter it, ${why}.`);
       if (blank(cut.loadPct)) err("labor.cut.loadPct", "Payroll load", `Payroll load: enter it (0% if none), ${why}.`);
     }
   }
@@ -2112,13 +2148,15 @@ function validateLabor(a, s, T, err) {
   }
 
   (L.added ?? []).forEach((item, i) => {
-    const p = `labor.added.${i}.`, name = item.label ?? `added item ${i + 1}`;
+    const p = `labor.added.${i}.`, name = addedName(a, i);
     if (item.doneBy === "paid") {
       const why = "because a paid hand does these hours";
       if (blank(item.paidRate)) err(p + "paidRate", "Pay rate", `Pay rate (${name}): enter it, ${why}.`);
       if (blank(item.loadPct)) err(p + "loadPct", "Payroll load", `Payroll load (${name}): enter it (0% if none), ${why}.`);
     }
-    if (Array.isArray(item.hours)) {
+    // While the start year is itself an error, an install time waits in entry 0 (state.js); that error names the problem.
+    const waits = a.module === "water" && item.label === "install" && !(Number.isInteger(s) && s >= 0 && s < lastShownYear(a));
+    if (Array.isArray(item.hours) && !waits) {
       const early = item.hours.findIndex((h, t) => t < s && num(h) > 0);
       const { label } = addedHoursInput(a, i);
       if (early >= 0) err(p + "hours", label, `${label}: year ${early} is before the module starts in year ${s}, so it cannot have hours.`);
