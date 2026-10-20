@@ -195,12 +195,23 @@ export function exampleRate(a) {
 }
 
 /**
+ * The verdict's state by the "pays" rule of 9.3, with the words the verdict sentence uses for it (9.5 item 1): "pays",
+ * "risk" (pays only if the loss estimate holds), "no", or "none" when there are no cash flows for the user.
+ */
+export function verdictState(r) {
+  if (r.noCashFlows) return { key: "none", text: "No cash flows for you in this analysis." };
+  if (r.cashNPV >= 0) return { key: "pays", text: "It pays." };
+  if (r.cashNPVWithRisk >= 0) return { key: "risk", text: "It pays only if the loss estimate holds." };
+  return { key: "no", text: "It does not pay." };
+}
+
+/**
  * The verdict sentence (9.5 item 1): the amount over T years at the rate, before tax; the state by the "pays" rule of
  * 9.3; when cash NPV is below 0 and there are cash benefits, the rise they would need; and, given the tornado's bars
  * (tornado(a, r).bars, widest first), "It turns most on" the entries with the two longest bars (none without bars).
  */
 export function verdictSentence(a, r, bars = []) {
-  if (r.noCashFlows) return "No cash flows for you in this analysis.";
+  if (r.noCashFlows) return verdictState(r).text;
   const unit = roundingUnit(a, r);
   const pct = quantity(r.rate * 100);
   const rate = exampleRate(a) ? `the example's ${pct}% real rate (an assumption, not a recommendation)` : `your ${pct}% real rate`;
@@ -208,7 +219,7 @@ export function verdictSentence(a, r, bars = []) {
   const amount = X === 0 ? `is within ${money(unit / 2)} of breaking even`
     : r.cashNPV >= 0 ? `saves about ${money(X)} more than it costs` : `costs about ${money(X)} more than it saves`;
   const parts = [`Over ${count(r.T, "year")} at ${rate}, before tax, this ${amount} in cash.`];
-  parts.push(r.cashNPV >= 0 ? "It pays." : r.cashNPVWithRisk >= 0 ? "It pays only if the loss estimate holds." : "It does not pay.");
+  parts.push(verdictState(r).text);
   if (r.cashNPV < 0 && r.pv.B > 0) {
     const f = (r.pv.C - r.pv.R) / r.pv.B;
     parts.push(f >= 2 ? `Cash benefits would need to rise about ${f.toFixed(1)}-fold.`
@@ -1217,6 +1228,8 @@ function sourceCite(p, source) {
 // ---------------------------------------------------------------- the verdict area and the rate (9.5 items 1 and 5)
 
 export const INDICATIVE = "Indicative only: most of the benefit is estimated, not from your records.";
+/** Where the page shows the verdict's state among the verdict area's lines: after "Indicative only", which comes first. */
+export const stateAt = (lines) => (lines[0] === INDICATIVE ? 1 : 0);
 
 /**
  * "Indicative only" (9.3, 7.3): a cash line, or a capital line's residual, is estimated when any input its value rests

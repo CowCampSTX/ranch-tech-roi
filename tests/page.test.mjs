@@ -199,6 +199,43 @@ test("row 49: Synthetic Ranch B's verdict area, in order", () => {
   assert.equal(T.tiles(B, r)[0].value, "about −$230,000");
 });
 
+test("the verdict's state, which the page shows after any \"Indicative only\" line, is the one its sentence states (9.3, 9.5 item 1)", () => {
+  const states = [
+    [setInput(example("ranchD"), "costs.subscription.unitCost", 6), "pays", "It pays."],
+    [setInput(example("ranchA"), "costs.subscription.unitCost", 340), "risk", "It pays only if the loss estimate holds."],
+    [example("ranchA"), "no", "It does not pay."],
+  ];
+  for (const [a, key, text] of states) {
+    const r = analyze(a);
+    assert.deepEqual(T.verdictState(r), { key, text });
+    assert.ok(T.verdictSentence(a, r).includes(` ${text}`), key);
+  }
+  // By the "pays" rule: cash NPV at or above 0 pays; below 0, it pays only if the loss estimate holds when cash NPV
+  // with expected losses avoided is at or above 0.
+  assert.equal(T.verdictState({ cashNPV: 0, cashNPVWithRisk: -1 }).key, "pays");
+  assert.equal(T.verdictState({ cashNPV: -1, cashNPVWithRisk: 0 }).key, "risk");
+  assert.equal(T.verdictState({ cashNPV: -1, cashNPVWithRisk: -0.01 }).key, "no");
+  const none = T.verdictState({ noCashFlows: true, cashNPV: 0, cashNPVWithRisk: 0 });
+  assert.deepEqual(none, { key: "none", text: "No cash flows for you in this analysis." });
+  assert.equal(T.verdictSentence(example("ranchA"), { noCashFlows: true }), none.text);
+});
+
+test("\"Indicative only\" stays first in the verdict area: the state the page adds comes after it (9.5 item 1, 10.1 row 49)", () => {
+  for (const id of EXAMPLE_IDS) {
+    const a = example(id), r = analyze(a), test = targetTest(a, r), rows = solveDrivers(a, r, test);
+    const lines = T.verdictArea(a, r, test, rows, tornado(a, r).bars);
+    assert.equal(lines[0], T.INDICATIVE, id);
+    assert.equal(T.stateAt(lines), 1, id);
+  }
+  assert.equal(T.stateAt(["Over 10 years ...", T.PUBLISHED_PRICES]), 0);
+  // The page draws the state at that place in the verdict, not above it.
+  const app = read("app.js"), html = read("index.html");
+  assert.match(app, /html\.splice\(T\.stateAt\(lines\), 0, /);
+  assert.ok(!html.includes('id="status"'));
+  // With no cash flows the verdict sentence stands alone (9.5 item 1): no state label repeats it.
+  assert.match(app, /if \(state\.key !== "none"\) html\.splice\(T\.stateAt/);
+});
+
 test("the verdict area in its full order: Synthetic Ranch A as the user's own, with the capacity line and both notes", () => {
   const A = analyzeMine(example("ranchA")), r = analyze(A), test = targetTest(A, r), rows = solveDrivers(A, r, test);
   const area = T.verdictArea(A, r, test, rows, tornado(A, r).bars);
@@ -931,6 +968,21 @@ test("exact page texts: the year-table note, the chart caption, the lists of wha
 
 // ---------------------------------------------------------------- the files the page is built from
 
+test("in-page links keep the analysis in the address: each names a section of the page, and the page scrolls to it itself (9.5 item 8)", () => {
+  const html = read("index.html"), app = read("app.js");
+  const ids = new Set([...html.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+  const targets = [...html.matchAll(/href="#([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(targets.length >= 10);
+  for (const id of targets) {
+    assert.ok(ids.has(id), `#${id} names no element`);
+    // Were the browser to follow it, the address would read as a version 1 link and open the wrong analysis.
+    assert.equal(readLink(`#${id}`).kind, "v1", id);
+  }
+  // So the page handles every such click without following it, and reads a section's address as no link.
+  assert.match(app, /closest\?\.\('a\[href\^="#"\]'\)[\s\S]{0,400}e\.preventDefault\(\)/);
+  assert.match(app, /readLink\(\/\^#\[\\w-\]\+\$\/\.test\(location\.hash\) && document\.getElementById\(location\.hash\.slice\(1\)\) \? "" : location\.hash\)/);
+});
+
 test("the page runs on the new engine; version 1's model and the outlook views are gone (9.1 step 6, F2)", () => {
   const html = read("index.html"), app = read("app.js");
   for (const s of ["5-year outlook", "12 months at a time", "fiveTable", "Break-even values"]) assert.ok(!html.includes(s), s);
@@ -958,11 +1010,13 @@ test("no sentence calls every starting cost a published list price, and the page
 
 test("the README describes the page it ships with (9.5 item 5)", () => {
   const readme = read("README.md");
-  for (const s of ["can be folded into the inputs", "light and dark mode", "being built", "Break-even table", "Return on cost",
+  for (const s of ["can be folded into the inputs", "being built", "Break-even table", "Return on cost",
     "the page does not use it yet", "today's model"]) assert.ok(!readme.includes(s), `README still says "${s}"`);
   for (const s of ["BCR", "What would make it pay", "Two inputs at once", "before tax", "made-up numbers for demonstration, not any real"]) {
     assert.ok(readme.includes(s), s);
   }
+  // It says the page has light and dark themes only while the page has them.
+  assert.ok(readme.includes("light and dark themes") && read("index.html").includes(':root[data-theme="dark"]'));
   // Its sources are the examples' own: every linked source, the reported price dated, every placeholder said to be one.
   const sources = T.exampleSources(EXAMPLE_IDS.map(example));
   for (const x of sources.filter((y) => y.url)) assert.ok(readme.includes(`](${x.url})`), x.url);
