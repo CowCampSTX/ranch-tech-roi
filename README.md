@@ -7,9 +7,10 @@ cash before tax, whether it pays for itself within your payback target, what wou
 which assumptions the answer really depends on. Every number on the page is calculated in the open, with the formula,
 the values that went into it, and where each value comes from.
 
-**Try it:** https://cowcampstx.github.io/ranch-tech-roi/ (runs in the browser; nothing is uploaded or saved).
+**Try it:** https://cowcampstx.github.io/ranch-tech-roi/ (runs in the browser; nothing is uploaded, and only
+your choice of light or dark theme is remembered, in this browser).
 
-![Ranch Tech ROI: the inputs, the verdict, the five-year test, the headline figures and "What would make it pay"](docs/screenshot.png)
+![Ranch Tech ROI: the inputs, the verdict, the five-year test and the headline figures](docs/screenshot.png)
 
 > The four starting points are synthetic example ranches: made-up numbers for demonstration, not any real operation's
 > data. Each example price is labeled as what it is: a published list price, a price reported by the press, or a
@@ -32,6 +33,9 @@ the values that went into it, and where each value comes from.
 **Analyze my operation** makes the analysis yours: the example's banner goes, and the page asks you to review the
 discount rate and to replace or confirm each synthetic placeholder. **Copy link** puts the scenario in the link (only what
 differs from the example). Links made with the version 1 page still open, converted, with a banner naming what changed.
+The bar above the results jumps to each part of them and keeps the cash NPV in view as you scroll; the page follows
+your device's light or dark setting, and the button at the top right switches it. A printout shows every value and every
+formula section, in the light theme.
 
 ![What the answer turns on: the sensitivity chart, and the two-way grid](docs/sensitivity.png)
 
@@ -205,7 +209,7 @@ No build step and no dependencies. The page uses JavaScript modules, so serve th
 
 ```bash
 python -m http.server 8000      # then open http://localhost:8000
-node --test tests/*.test.mjs    # 335 tests
+node --test tests/*.test.mjs    # 338 tests
 ```
 
 - `roi.test.mjs` (94): the model's cost lines, billing, labor, head counts, shared savings, metrics, weight gain,
@@ -221,15 +225,15 @@ node --test tests/*.test.mjs    # 335 tests
 - `pay.test.mjs` (41): the payback target, the five-year test of each example, and "What would make it pay".
 - `sens.test.mjs` (19): the sensitivity entries of each module, the tornado's bars, lists, caption and hover text,
   and the two-way grid.
-- `page.test.mjs` (33): what the page shows: the inputs, their labels and units, the verdict area in order, the rate
-  and placeholder labels, the vendor fill, what was left out and its order, "Indicative only", the year table's cells
-  and notes, the chart's payback mark, the formulas, the assumptions and sources, the README, and no NaN, Infinity
-  or "undefined" in any text.
+- `page.test.mjs` (36): what the page shows: the inputs, their labels and units, the verdict area in order and its
+  state, the rate and placeholder labels, the vendor fill, what was left out and its order, "Indicative only", the
+  year table's cells and notes, the chart's payback mark, the formulas, the assumptions and sources, the README, the
+  in-page links that keep the analysis in the address, and no NaN, Infinity or "undefined" in any text.
 
 ## Files
 
 ```
-index.html        the page and its styles (works on a phone)
+index.html        the page and its styles: light and dark themes, and layouts for a computer, a phone and print
 app.js            the page: draws the inputs from form.js, and the verdict, panel, charts and tables from text.js
 form.js           the inputs the page shows for a state: their groups, labels, units, help and source notes
 roi.js            the model: pure functions, no dependencies, shared with the tests
