@@ -54,11 +54,12 @@ chart and two-way grid, `text.test.mjs` for the page text, `page.test.mjs` for t
 New material goes in the folder it belongs to; add a new folder under `docs/` (and the same folder in Drive) only
 for a new kind of material, and list it in `docs/README.md`. Name dated material `YYYY-MM-DD-what`.
 
-**Google Drive** (My Drive > `Ranch Tech ROI`) holds readable copies for the owner and anyone they share with. Drive
+**Google Drive** ([My Drive > `Ranch Tech ROI`](https://drive.google.com/drive/folders/15Knr__hN8oMxNsTSbdlj3WmF9wSN4xtK)) holds readable copies for the owner and anyone they share with. Drive
 is a copy: change the repository first, then refresh the copy. Code stays in GitHub; put code in Drive only when the
-owner needs it there. The project's Drive is the owner's Google Drive for desktop account (on their PC, `My Drive`),
-which is not the account a Claude Drive connector may be signed in to: refresh the copy on the owner's PC (download
-the branch from GitHub and copy `docs/` into the folders below), not through the connector. The filing rules for
+owner needs it there. The project's Drive is the owner's Google account that Google Drive for desktop syncs on their
+PC (`My Drive`). Check that a Drive connector is signed in to that same account before writing through it. For a
+bulk refresh, copy on the owner's PC instead: download the branch from GitHub and copy `docs/` into the folders
+below. The filing rules for
 Drive:
 
 - Everything for this project lives inside `Ranch Tech ROI`: never at the top of My Drive, in another project's
