@@ -54,9 +54,19 @@ chart and two-way grid, `text.test.mjs` for the page text, `page.test.mjs` for t
 New material goes in the folder it belongs to; add a new folder under `docs/` (and the same folder in Drive) only
 for a new kind of material, and list it in `docs/README.md`. Name dated material `YYYY-MM-DD-what`.
 
-**Google Drive** (My Drive > `Ranch Tech ROI`) holds readable copies for the owner and anyone they share with, in
-folders that mirror `docs/` (`audit`, `training`, `archive`). Drive is a copy: change the repository first, then
-refresh the copy. `docs/README.md` has the folder links.
+**Google Drive** (My Drive > `Ranch Tech ROI`) holds readable copies for the owner and anyone they share with. Drive
+is a copy: change the repository first, then refresh the copy. Code stays in GitHub; put code in Drive only when the
+owner needs it there. The filing rules for Drive:
+
+- Everything for this project lives inside `Ranch Tech ROI`: never at the top of My Drive, in another project's
+  folder, or loose anywhere else.
+- Every file goes in the folder for its kind, and the folders mirror `docs/` with the same names: `audit` (the plan,
+  spec, evidence table, sources and prototype), `images` (README and page screenshots), `training` (outline, `deck`,
+  `shots`) and `archive` (dated material kept for the record). Only `AGENTS.md`, `README.md` and `Docs index.md`
+  (a copy of `docs/README.md`) sit at the top.
+- A new kind of material gets a new folder in both places, and a row in `docs/README.md`.
+- Dated material is named `YYYY-MM-DD-what`. Superseded files move to `archive`; nothing in Drive is deleted
+  without the owner's OK.
 
 **Claude artifacts:** the training slide deck is published at https://claude.ai/artifact/ANXUwkPPZ95YDk4F9W7JTn;
 its source is `docs/training/deck/`.
