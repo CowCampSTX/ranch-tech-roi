@@ -102,6 +102,8 @@ built as written, raise it as a spec issue rather than quietly building somethin
 
 ## Owner's working rules
 
+- Nothing lives only in a chat or a session. Decisions, plans, research, files and anything another agent would need
+  go into the repository (or the Drive copy, for the owner's readable files) before the session ends.
 - At most two review rounds per change before its pull request opens. Tests and CI still run on every pull request.
 - Each new piece of work starts fresh (a new branch, and a new chat or thread with a short brief) rather than
   continuing one long session.
