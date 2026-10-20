@@ -1,31 +1,89 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in this repository.
+The one instruction file for every AI coding agent in this repository: Claude Code reads it through `CLAUDE.md`
+(which only imports it), and Codex reads it directly. Change the rules here, never in a copy.
 
 ## Project
 
-Ranch Tech ROI is a plain HTML and JavaScript calculator for ranch technology decisions:
+Ranch Tech ROI is a plain HTML and JavaScript calculator for ranch technology decisions: will remote water
+monitoring, virtual fencing, or EID tags with a reader and scale pay for themselves on this ranch, before tax. It is
+live at https://cowcampstx.github.io/ranch-tech-roi/, served by GitHub Pages from the root of `main`, so the page and
+its scripts stay at the repository root.
 
-- `index.html`: the page
-- `app.js`: page and DOM code
-- `roi.js`: the phase-1 engine, built step by step (pure functions, no DOM, no dependencies); the page moves to it in
-  build step 6
-- `v1.js`: today's model, which the page runs on until then, and the frozen `V1_FIELDS` and `V1_PRESETS` (B8)
-- `text.js`: the page text built from the engine's output (DOM-free), from build step 3
-- `examples.js`: the four synthetic example ranches with their `prov`, and the vendor fills (DOM-free), from build
-  step 5
-- `state.js`: what each user action does to the state (pure, DOM-free), from build step 5
-- `links.js`: shared links: writing and reading the link, and `migrateV1()` (DOM-free), from build step 6
-- `tests/*.test.mjs`: tests, run in CI on Node 22 (`.github/workflows/test.yml`): `roi.test.mjs` for the engine,
-  `modules.test.mjs` for the three modules on the example ranches, `examples.test.mjs` for the examples' provenance,
-  `state.test.mjs` for the user actions, `links.test.mjs` for the links, `pay.test.mjs` for the payback target and
-  "What would make it pay", `text.test.mjs` for the page text, `v1.test.mjs` for today's model
+The repository is public and is a portfolio piece for its owner (GitHub: CowCampSTX). Don't add anything about the
+owner's background to the repository unless the owner asks. Never commit `.env` files, tokens or passwords.
+
+**Status (20 Oct 2026):** phase 1 (section 9.1, build steps 1 to 6) is built and the page runs on the new engine.
+The visual polish (PR #14) is merged. The one phase-1 item still held is the EID compliance baseline (B4b), which waits for
+research task R1 (8.4).
 
 There is no framework, build step or package manager. Keep it that way unless a change solves a demonstrated problem.
 
-Run the tests from the repository root, as CI does:
+## Where things live
+
+GitHub is the source of truth: both agents read and write the repository, and nothing an agent needs lives only
+somewhere else.
+
+```
+AGENTS.md            this file (shared by Claude Code and Codex)
+CLAUDE.md            imports this file with @AGENTS.md, nothing else
+README.md            what the calculator does, every formula (update it when a formula changes)
+index.html           the page
+app.js               page and DOM code
+form.js              the page's inputs, in the order of 9.4, as data
+roi.js               the engine (pure functions, no DOM, no dependencies)
+text.js              the page text built from the engine's output (DOM-free)
+examples.js          the four synthetic example ranches with their `prov`, and the vendor fills (DOM-free)
+state.js             what each user action does to the state (pure, DOM-free)
+links.js             shared links: writing and reading the link, and migrateV1() (DOM-free)
+v1.js                the version 1 inputs and presets (B8), kept only so old links can be read
+tests/               node:test tests, run in CI (.github/workflows/test.yml)
+  snapshots/         pinned version 1 links
+docs/
+  README.md          index of the docs, and the matching Google Drive folders
+  audit/             the plan and the spec (see "The plan is the spec")
+  training/          the training path: outline.md, the slide deck's source (deck/) and its screenshots (shots/)
+  archive/           dated material kept for the record, not for building against
+```
+
+The tests: `roi.test.mjs` for the engine, `modules.test.mjs` for the three modules on the example ranches,
+`examples.test.mjs` for the examples' provenance, `state.test.mjs` for the user actions, `links.test.mjs` for the
+links, `pay.test.mjs` for the payback target and "What would make it pay", `sens.test.mjs` for the sensitivity
+chart and two-way grid, `text.test.mjs` for the page text, `page.test.mjs` for the page switch.
+
+New material goes in the folder it belongs to; add a new folder under `docs/` (and the same folder in Drive) only
+for a new kind of material, and list it in `docs/README.md`. Name dated material `YYYY-MM-DD-what`.
+
+**Google Drive** ([My Drive > `Ranch Tech ROI`](https://drive.google.com/drive/folders/15Knr__hN8oMxNsTSbdlj3WmF9wSN4xtK)) holds readable copies for the owner and anyone they share with. Drive
+is a copy: change the repository first, then refresh the copy. Code stays in GitHub; put code in Drive only when the
+owner needs it there. The project's Drive is the owner's Google account that Google Drive for desktop syncs on their
+PC (`My Drive`). Check that a Drive connector is signed in to that same account before writing through it. For a
+bulk refresh, copy on the owner's PC instead: download the branch from GitHub and copy `docs/` into the folders
+below. The filing rules for
+Drive:
+
+- Everything for this project lives inside `Ranch Tech ROI`: never at the top of My Drive, in another project's
+  folder, or loose anywhere else. Only material shared between projects lives outside a project folder.
+- Every folder and subfolder, in Drive and under `docs/`, has a `README.md` saying what belongs in it.
+- Every file goes in the folder for its kind, and the folders mirror `docs/` with the same names: `audit` (the plan,
+  spec, evidence table, sources and prototype), `images` (README and page screenshots), `training` (outline, `deck`,
+  `shots`) and `archive` (dated material kept for the record). Only `AGENTS.md`, `README.md` and `Docs index.md`
+  (a copy of `docs/README.md`) sit at the top.
+- A new kind of material gets a new folder in both places, and a row in `docs/README.md`.
+- Dated material is named `YYYY-MM-DD-what`. Superseded files move to `archive`; nothing in Drive is deleted
+  without the owner's OK.
+
+**Claude artifacts:** the training slide deck is published at https://claude.ai/artifact/ANXUwkPPZ95YDk4F9W7JTn;
+its source is `docs/training/deck/`.
+
+## Run and test
+
+Run the tests from the repository root, as CI does (Node 22):
 
     node --test tests/*.test.mjs
+
+To see the page, open `index.html` in a browser, or serve the folder (`python3 -m http.server`) and open
+http://localhost:8000/. `node docs/audit/prototype/examples.mjs` reproduces Appendix A.
 
 ## The plan is the spec
 
@@ -44,16 +102,28 @@ run across them:
 - [`docs/audit/evidence-table.md`](docs/audit/evidence-table.md) and
   [`docs/audit/evidence-table.csv`](docs/audit/evidence-table.csv) are the evidence table (section 5.3); the CSV has
   full source URLs. [`docs/audit/sources.md`](docs/audit/sources.md) is the source list (section 13).
-- [`docs/audit/prototype/`](docs/audit/prototype/) reproduces Appendix A (`node docs/audit/prototype/examples.mjs`).
-  It is a reference for the numbers, not code to copy into the app.
+- [`docs/audit/prototype/`](docs/audit/prototype/) reproduces Appendix A. It is a reference for the numbers, not code
+  to copy into the app.
 
 When the code and the spec disagree, follow the spec. If the spec itself is wrong, contradicts itself or cannot be
 built as written, raise it as a spec issue rather than quietly building something else.
 
 ## Roles
 
-- **Claude builds phase 1**, one pull request per build step in 9.1, each with its tests passing.
-- **Codex reviews** those pull requests (quality control). Codex comments; it does not push to Claude's branches.
+- Claude Code and Codex both work from this file. Either can build a change or review one.
+- The agent that opens a pull request owns it. The other agent reviews by commenting and does not push to the
+  owner's branch.
+- Phase 1 was built by Claude and reviewed by Codex, one pull request per build step in 9.1.
+
+## Owner's working rules
+
+- Nothing lives only in a chat or a session. Decisions, plans, research, files and anything another agent would need
+  go into the repository (or the Drive copy, for the owner's readable files) before the session ends.
+- At most two review rounds per change before its pull request opens. Tests and CI still run on every pull request.
+- Each new piece of work starts fresh (a new branch, and a new chat or thread with a short brief) rather than
+  continuing one long session.
+- When work pauses for a usage limit, post a progress update first (in the Claude project, to the project chat),
+  just before the limit hits when possible.
 
 ## Owner's standing rules
 
@@ -73,19 +143,16 @@ These come from the owner's decisions in section 12 and apply to every change. E
   never a default.
 - The EID compliance baseline (B4b) is not built until research task R1 (8.4) is done.
 
-Until build step 6 moves the page to the new engine (9.1), today's page runs on the old model in `v1.js` and carries
-two of these rules: its results say they are before tax, and its discount rate is labeled as an example to review.
-The rest (vendor price fills, labels and "Quote required"; the rate review prompt; placeholder flags; land units and
-operator shares) are reviewed in `roi.js` and `text.js` in the step that builds them, and on the page at step 6,
-whose by-hand checklist covers every rule. A pull request before step 6 must not make today's page break a rule it
-already follows. (Owner decision, 15 Oct 2026.)
+A pull request must not make the page break a rule it already follows. The by-hand checklist of build step 6 covers
+every rule on the page.
 
 ## Conventions
 
 - `roi.js` stays pure and importable in Node. DOM code stays in `app.js`. Code that tests must import, such as
   `migrateV1()` (B8), goes in a DOM-free module.
-- One build step per pull request. Each pull request lists the roadmap items and spec sections it implements.
+- One change per pull request. Each pull request lists the roadmap items and spec sections it implements.
 - `README.md` documents every formula; update it when a formula changes.
+- Old shared links keep working: a change to the link format adds a version and a test, never breaks an old link.
 
 ## Review guidelines
 

@@ -10,7 +10,7 @@ the values that went into it, and where each value comes from.
 **Try it:** https://cowcampstx.github.io/ranch-tech-roi/ (runs in the browser; nothing is uploaded, and only
 your choice of light or dark theme is remembered, in this browser).
 
-![Ranch Tech ROI: the inputs, the verdict, the five-year test and the headline figures](docs/screenshot.png)
+![Ranch Tech ROI: the inputs, the verdict, the five-year test and the headline figures](docs/images/screenshot.png)
 
 > The four starting points are synthetic example ranches: made-up numbers for demonstration, not any real operation's
 > data. Each example price is labeled as what it is: a published list price, a price reported by the press, or a
@@ -37,7 +37,7 @@ The bar above the results jumps to each part of them and keeps the cash NPV in v
 your device's light or dark setting, and the button at the top right switches it. A printout shows every value and every
 formula section, in the light theme.
 
-![What the answer turns on: the sensitivity chart, and the two-way grid](docs/sensitivity.png)
+![What the answer turns on: the sensitivity chart, and the two-way grid](docs/images/sensitivity.png)
 
 ## The model
 
@@ -249,8 +249,12 @@ state.js          what each user action does to the state: load an example, anal
 links.js          shared links: writing the state into the link, reading it back, and converting version 1 links
 v1.js             the version 1 page's inputs and starting points, which links.js reads to convert old links
 tests/            node:test unit tests
-docs/             screenshots
+AGENTS.md         instructions for AI coding agents (CLAUDE.md imports it)
+docs/             the documentation: docs/README.md lists it
 docs/audit/       the audit and improvement plan, and the phase-1 specification
+docs/images/      the screenshots in this README
+docs/training/    the training path: outline, slide deck source and screenshots
+docs/archive/     dated material kept for the record
 ```
 
 ## License
